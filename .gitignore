@@ -1,0 +1,13 @@
+# Binaries
+/selvedge
+*.exe
+*.test
+
+# Database files
+data/*.db
+data/*.db-shm
+data/*.db-wal
+
+# OS & Logs
+.DS_Store
+*.log

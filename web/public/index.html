@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FPCC Selvedge | Enterprise Apparel Graph OS</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <!-- Topbar -->
+  <header class="topbar">
+    <div class="brand-section">
+      <div class="brand-badge">⚡ SELVEDGE</div>
+      <div>
+        <div class="brand-title">FPCC Enterprise Operating System</div>
+        <div class="brand-sub">Unified Graph System of Record • Bi-Temporal Engine</div>
+      </div>
+    </div>
+
+    <!-- Station Nav Buttons -->
+    <nav class="station-nav">
+      <button class="station-btn active" data-view="view-orders">
+        <span>Station 0: Order Taking</span>
+      </button>
+      <button class="station-btn" data-view="view-inward">
+        <span>Station 1: Inward & QR Bundles</span>
+      </button>
+    </nav>
+
+    <!-- System Badge & Actions -->
+    <div class="topbar-actions">
+      <button class="btn btn-secondary btn-sm" id="btn-open-graph">
+        🕸️ Graph Explorer
+      </button>
+      <div class="system-badge">
+        <span class="system-dot"></span>
+        <span id="sys-status-text">CONNECTING...</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="main-container">
+    <!-- View 0: Order Taking -->
+    <section id="view-orders" class="view-section active"></section>
+
+    <!-- View 1: Inward & QR -->
+    <section id="view-inward" class="view-section"></section>
+  </main>
+
+  <!-- Global Toast Notification Container -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- Unified Graph Explorer Modal -->
+  <div class="modal-overlay" id="modal-graph-inspector">
+    <div class="modal-box" style="max-width:750px;">
+      <div class="modal-header">
+        <h3>Unified Graph Kernel Explorer</h3>
+        <button class="btn btn-secondary btn-sm modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">
+          Inspect real-time bi-temporal node properties, valid-time / txn-time timestamps, and relationship edges:
+        </p>
+        <div style="display:flex;gap:8px;margin-bottom:16px;">
+          <input type="text" id="inp-graph-node-id" class="input-control input-mono" placeholder="e.g. ord_S261019A or lot_261019-A or item_color_35870" />
+          <button class="btn btn-primary" id="btn-query-graph">Inspect Node</button>
+        </div>
+        <pre id="graph-inspector-result" style="background:#090d16;padding:16px;border-radius:6px;font-family:var(--font-mono);font-size:12px;max-height:350px;overflow:auto;color:#a7f3d0;border:1px solid var(--border-subtle);">Enter a Node ID above to view bi-temporal graph properties.</pre>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary modal-close">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- JavaScript Entrypoint -->
+  <script type="module" src="/js/app.js"></script>
+</body>
+</html>

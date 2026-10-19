@@ -1,0 +1,1 @@
+{"timestamp":"2026-10-19T14:59:15.940Z","tool":"opencode_code_review","model":"mimo-v2.6-flash","durationMs":120043,"status":"ERROR","cwd":"/Users/arjavdmehta/selvedge","details":"REVIEW_TARGET=\"internal/workflow/engine.go\" FOCUS=\"concurrency, idempotency, bi-temporal graph architecture\" SKILLS=\"\""}
