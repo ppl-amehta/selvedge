@@ -19,6 +19,7 @@ import (
 	"github.com/ppl-amehta/selvedge/internal/platform/db"
 	"github.com/ppl-amehta/selvedge/internal/platform/router"
 	"github.com/ppl-amehta/selvedge/internal/workflow"
+	"github.com/ppl-amehta/selvedge/web"
 )
 
 func main() {
@@ -96,7 +97,12 @@ func main() {
 		}
 	}()
 
-	// 6. Router Setup
+	// 6. Router Setup with Svelte 5 Embedded SPA
+	svelteFS, err := web.GetFS()
+	if err != nil {
+		log.Printf("Notice: Embedded Svelte dist not found: %v", err)
+	}
+
 	absWebDir, _ := filepath.Abs(*webDir)
 	r := router.NewRouter(router.AppServices{
 		Graph:     graphStore,
@@ -104,6 +110,7 @@ func main() {
 		Masters:   mastersService,
 		Orders:    ordersService,
 		Inventory: inventoryService,
+		WebFS:     svelteFS,
 		WebDir:    absWebDir,
 	})
 

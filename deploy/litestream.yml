@@ -1,0 +1,23 @@
+# ==============================================================================
+# FPCC SELVEDGE: LITESTREAM EDGE REPLICATION CONFIGURATION
+# Factory Edge Terminal WAL Streaming to Cloud Object Storage (S3 / R2 / GCS)
+# Sub-second RPO disaster recovery with zero operational overhead
+# ==============================================================================
+
+dbs:
+  - path: /data/selvedge.db
+    replicas:
+      # Primary Cloud Replica (Cloudflare R2 / AWS S3 / MinIO)
+      - type: s3
+        bucket: "${LITESTREAM_BUCKET:-fpcc-selvedge-backups}"
+        path: "factory-edge-01"
+        endpoint: "${LITESTREAM_ENDPOINT:-https://auto.r2.cloudflarestorage.com}"
+        access-key-id: "${LITESTREAM_ACCESS_KEY_ID}"
+        secret-access-key: "${LITESTREAM_SECRET_ACCESS_KEY}"
+        retention: "720h" # 30-day continuous point-in-time recovery window
+        sync-interval: "1s" # Sub-second streaming interval
+
+      # Secondary Local / LAN Failover Mirror (Network Attached Storage)
+      - type: file
+        path: "/mnt/factory_nas/selvedge_replica"
+        retention: "168h" # 7-day local on-premise failover window

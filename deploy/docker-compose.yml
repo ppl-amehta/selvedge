@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  # 1. FPCC Selvedge Enterprise Edge Engine (Single Native Binary with Embedded Svelte 5)
+  selvedge:
+    image: golang:1.27-alpine
+    container_name: selvedge-edge-node
+    restart: unless-stopped
+    working_dir: /app
+    volumes:
+      - selvedge-data:/data
+      - .:/app
+    environment:
+      - PORT=4000
+      - DB_PATH=/data/selvedge.db
+      - HQ_ENDPOINT=${HQ_ENDPOINT:-}
+      - HQ_API_KEY=${HQ_API_KEY:-}
+    ports:
+      - "4000:4000"
+    command: ["sh", "-c", "go build -o /app/selvedge ./cmd/selvedge && /app/selvedge -port 4000 -db /data/selvedge.db"]
+
+  # 2. Litestream Continuous WAL Replication Sidecar
+  litestream:
+    image: litestream/litestream:0.3.13
+    container_name: selvedge-litestream
+    restart: unless-stopped
+    volumes:
+      - selvedge-data:/data
+      - ./deploy/litestream.yml:/etc/litestream.yml
+    environment:
+      - LITESTREAM_ACCESS_KEY_ID=${LITESTREAM_ACCESS_KEY_ID:-}
+      - LITESTREAM_SECRET_ACCESS_KEY=${LITESTREAM_SECRET_ACCESS_KEY:-}
+      - LITESTREAM_BUCKET=${LITESTREAM_BUCKET:-fpcc-selvedge-backups}
+      - LITESTREAM_ENDPOINT=${LITESTREAM_ENDPOINT:-https://auto.r2.cloudflarestorage.com}
+    command: ["replicate", "--config", "/etc/litestream.yml"]
+    depends_on:
+      - selvedge
+
+volumes:
+  selvedge-data:
+    driver: local

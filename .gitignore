@@ -11,3 +11,8 @@ data/*.db-wal
 # OS & Logs
 .DS_Store
 *.log
+
+# Dependencies
+node_modules/
+web/node_modules/
+

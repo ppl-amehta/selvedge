@@ -1,10 +1,15 @@
 package router
 
 import (
+	"bytes"
 	"encoding/json"
+	"io/fs"
 	"net/http"
 	"os"
+	"path"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -22,6 +27,7 @@ type AppServices struct {
 	Masters   *masters.Service
 	Orders    *orders.Service
 	Inventory *inventory.Service
+	WebFS     fs.FS
 	WebDir    string
 }
 
@@ -229,12 +235,35 @@ func NewRouter(svc AppServices) http.Handler {
 		renderJSON(w, http.StatusOK, map[string]any{"success": true, "dispatchedCount": count})
 	})
 
-	// 7. Static Web Serving for the 2 Screens (Order Taking & Inward)
-	if svc.WebDir != "" {
+	// 7. Svelte 5 Frontend SPA Serving (Embedded in binary or disk fallback)
+	if svc.WebFS != nil {
+		indexHTML, _ := fs.ReadFile(svc.WebFS, "index.html")
+		fileServer := http.FileServerFS(svc.WebFS)
+
+		r.Handle("/*", http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			p := strings.TrimPrefix(path.Clean(req.URL.Path), "/")
+			if p == "" || p == "index.html" {
+				w.Header().Set("Content-Type", "text/html; charset=utf-8")
+				w.Header().Set("Cache-Control", "no-cache")
+				http.ServeContent(w, req, "index.html", time.Time{}, bytes.NewReader(indexHTML))
+				return
+			}
+			if _, err := fs.Stat(svc.WebFS, p); err != nil {
+				// Unknown route -> SPA fallback
+				w.Header().Set("Content-Type", "text/html; charset=utf-8")
+				w.Header().Set("Cache-Control", "no-cache")
+				http.ServeContent(w, req, "index.html", time.Time{}, bytes.NewReader(indexHTML))
+				return
+			}
+			if strings.HasPrefix(p, "assets/") {
+				w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+			}
+			fileServer.ServeHTTP(w, req)
+		}))
+	} else if svc.WebDir != "" {
 		if _, err := os.Stat(svc.WebDir); err == nil {
 			fileServer := http.FileServer(http.Dir(svc.WebDir))
 			r.Handle("/*", http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-				// If file doesn't exist, serve index.html for SPA
 				path := svc.WebDir + req.URL.Path
 				if _, err := os.Stat(path); os.IsNotExist(err) {
 					http.ServeFile(w, req, svc.WebDir+"/index.html")
