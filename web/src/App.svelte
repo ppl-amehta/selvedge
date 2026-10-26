@@ -11,6 +11,9 @@
   let isOnline = $state(false);
   let toasts = $state([]);
 
+  // Adaptive Day (Light) / Night (Dark) Theme
+  let currentTheme = $state('dark');
+
   // Global Toast Function
   if (typeof window !== 'undefined') {
     window.showToast = (message, type = 'info') => {
@@ -22,7 +25,39 @@
     };
   }
 
+  function applyTheme(theme) {
+    currentTheme = theme;
+    if (typeof document !== 'undefined') {
+      document.documentElement.setAttribute('data-theme', theme);
+      try {
+        localStorage.setItem('selvedge-theme', theme);
+      } catch (e) {
+        // ignore in private browsing
+      }
+    }
+  }
+
+  function toggleTheme() {
+    const next = currentTheme === 'light' ? 'dark' : 'light';
+    applyTheme(next);
+  }
+
   onMount(async () => {
+    // 1. Initialize Adaptive Theme
+    try {
+      const savedTheme = localStorage.getItem('selvedge-theme');
+      if (savedTheme === 'light' || savedTheme === 'dark') {
+        applyTheme(savedTheme);
+      } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
+        applyTheme('light');
+      } else {
+        applyTheme('dark');
+      }
+    } catch (e) {
+      applyTheme('dark');
+    }
+
+    // 2. Fetch System Health & Masters
     try {
       const health = await api.health();
       isOnline = health.status === 'ok';
@@ -61,7 +96,26 @@
     </button>
   </nav>
 
-  <div style="display:flex;align-items:center;gap:14px;">
+  <div style="display:flex;align-items:center;gap:12px;">
+    <!-- Adaptive Day / Night Labeled Switcher -->
+    <button
+      class="theme-toggle-btn"
+      onclick={toggleTheme}
+      title="Current theme: {currentTheme === 'light' ? 'Day (Bright)' : 'Night (Dark)'}. Click to switch."
+      aria-label="Toggle Day / Night theme"
+    >
+      <span class="theme-toggle-pill">
+        <span class="theme-toggle-item day-item {currentTheme === 'light' ? 'active' : ''}">
+          <span class="theme-icon">☀️</span>
+          <span class="theme-label">Day</span>
+        </span>
+        <span class="theme-toggle-item night-item {currentTheme === 'dark' ? 'active' : ''}">
+          <span class="theme-icon">🌙</span>
+          <span class="theme-label">Night</span>
+        </span>
+      </span>
+    </button>
+
     <button class="btn btn-secondary btn-sm" onclick={() => isGraphOpen = true}>
       🕸️ Graph Explorer
     </button>

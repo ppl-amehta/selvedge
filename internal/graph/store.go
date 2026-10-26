@@ -53,6 +53,42 @@ func (s *Store) InsertNode(tx *sql.Tx, nodeType string, props map[string]any, cu
 	}, nil
 }
 
+// EnsureNode checks if an active node with the specified ID already exists.
+// If it exists, it returns the existing node with stored properties and timestamps.
+// If it does not exist, it inserts the node.
+func (s *Store) EnsureNode(tx *sql.Tx, nodeType string, props map[string]any, customID string) (*Node, error) {
+	if customID == "" {
+		return s.InsertNode(tx, nodeType, props, "")
+	}
+
+	var execer interface {
+		QueryRow(query string, args ...any) *sql.Row
+	}
+	if tx != nil {
+		execer = tx
+	} else {
+		execer = s.db
+	}
+
+	var existing Node
+	var propsStr string
+	err := execer.QueryRow(`
+		SELECT id, node_type, props_json, valid_from, valid_to, txn_from, txn_to
+		FROM graph_nodes
+		WHERE id = ? AND txn_to IS NULL AND valid_to IS NULL
+	`, customID).Scan(&existing.ID, &existing.NodeType, &propsStr, &existing.ValidFrom, &existing.ValidTo, &existing.TxnFrom, &existing.TxnTo)
+	if err == nil {
+		decodedProps, _ := DecodeProps(propsStr)
+		existing.Props = decodedProps
+		return &existing, nil
+	}
+	if err != sql.ErrNoRows {
+		return nil, fmt.Errorf("failed to query existing node %s: %w", customID, err)
+	}
+
+	return s.InsertNode(tx, nodeType, props, customID)
+}
+
 // UpdateNode applies the append-only bi-temporal SGi pattern:
 // Closes the previous active version by setting txn_to = now,
 // and inserts a new version with txn_from = now.
@@ -198,6 +234,9 @@ func (s *Store) Traverse(startNodeID, edgeType, direction string) ([]*Node, erro
 		}
 		n.Props = props
 		nodes = append(nodes, &n)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 
 	return nodes, nil

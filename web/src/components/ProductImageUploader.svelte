@@ -8,7 +8,7 @@
 
   let isUploading = $state(false);
   let uploadError = $state('');
-  let fileInput;
+  let fileInput = $state();
 
   async function handleFileSelect(e) {
     const file = e.target.files?.[0];

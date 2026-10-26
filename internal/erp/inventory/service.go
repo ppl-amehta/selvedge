@@ -725,8 +725,8 @@ func (s *Service) RecordFloorCount(p FloorCountPayload) (FloorCountResult, error
 		locNodeID := fmt.Sprintf("loc_%s", strings.ToUpper(loc))
 
 		// Ensure LOCATION node exists
-		if _, err := s.graph.InsertNode(tx, graph.TypeLocation, map[string]any{"code": loc}, locNodeID); err != nil {
-			return FloorCountResult{}, fmt.Errorf("failed to insert location graph node: %w", err)
+		if _, err := s.graph.EnsureNode(tx, graph.TypeLocation, map[string]any{"code": loc}, locNodeID); err != nil {
+			return FloorCountResult{}, fmt.Errorf("failed to ensure location graph node: %w", err)
 		}
 
 		// Close previous STORED_AT edges for this bundle

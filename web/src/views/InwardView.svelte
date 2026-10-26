@@ -47,8 +47,8 @@
 
   // Conditional specs
   let gateFabricType = $state('Knitted');
-  let gateInvoiceGsm = $state(180);
-  let gateDia = $state(60);
+  let gateInvoiceGsm = $state('180');
+  let gateDia = $state('60"');
   let gateComposition = $state('100% Super Combed Cotton');
   let gateFabricRate = $state('');
 
@@ -57,7 +57,7 @@
   let gateTapeColor = $state('');
   let gateTeethColor = $state('Antique Brass');
   let gateSlider = $state('Auto-lock');
-  let gateClosure = $state('Open-end');
+  let gateClosure = $state('Open-end (OE)');
 
   let gatePackagingType = $state('Polybag');
   let gateVendorPackagingName = $state('');
@@ -70,7 +70,7 @@
   let gateFgType = $state('Polo');
   let gateVendorFgName = $state('');
 
-  let gateLabelType = $state('Woven');
+  let gateLabelType = $state('Damask Woven');
   let gateLabelGenre = $state('Main Label');
 
   // Bundle stubs for Station 1A
@@ -99,17 +99,64 @@
   let qcBundles = $state([]);
 
   // =========================================================
-  // MASTER DROPDOWN OPTIONS
+  // DROPDOWN MASTER DATA (Google Sheets & Seed Masters)
   // =========================================================
+  const inwardTypeOptions = ['Fabric', 'Zips', 'Packaging', 'Trims', 'Finished Goods', 'Labels'];
+
+  const fabricTypeOptions = [
+    'Single Jersey', 'Pique', 'Fleece', 'Rib 1x1 / 2x2', 'Interlock', 
+    'Collar', 'Cuff', 'Bonded', 'Canvass', 'WR-rain', 'Looperknit', 'NS Lycra', 'Hemp', 'Terry', 'Knitted', 'Woven'
+  ];
+
+  const standardGsmOptions = ['140', '160', '180', '200', '220', '240', '260', '280', '300', '320', '350', '380', '400'];
+  const standardDiaOptions = ['24"', '26"', '28"', '30"', '32"', '34"', '36"', '40"', '48"', '60"'];
+
+  const compositionOptions = [
+    '100% Super Combed Cotton', '100% Cotton', '95% Cotton 5% Spandex / Lycra',
+    '60% Cotton 40% Polyester', '100% Polyester', '100% Hemp', '80% Cotton 20% Polyester', '100% Linen'
+  ];
+
+  const zipTypeOptions = ['Coil', 'Waterproof', 'Vislon Zip', 'Two way Coil', 'Metal', 'Reverse Coil', 'Aluminium', 'Steel', 'Invisible'];
+  const zipSliderOptions = ['Auto-lock', 'DA8DR4', 'DADR7 EJ PB 12', 'metal', 'rubber', 'Non-lock', 'Pin-lock', 'Reversible', 'Spring-lock', 'Semi-auto'];
+  const zipClosureOptions = ['Open-end (OE)', 'Closed-ended (CE)', 'Two-way open-end', 'Roll continuous'];
+  const teethColorOptions = ['Antique Brass', 'Gunmetal', 'Shiny Silver', 'Matte Black', 'Golden', 'Rainbow', 'Silver Nickel'];
+
+  const packagingTypeOptions = ['Polybag', 'Tape', 'Hangtag', 'Loop Pins', 'Courier Bag', 'Butter Paper', 'Carton', 'Silica Gel', 'Barcode Sticker', 'Hanger'];
+  const trimTypeOptions = ['Elastic', 'Tapes', 'Cord', 'Button', 'Eyelet', 'Rivet', 'Badge', 'Drawcord', 'Stopper', 'Aglet', 'Twill Tape', 'Thread Elastic'];
+  const trimSizeOptions = ['14L', '16L', '18L', '20L', '24L', '28L', '32L', '36L', '40L', '5mm', '8mm', '10mm', '12mm', '15mm', '20mm', '25mm', '30mm', '38mm', '50mm', 'Round', 'Flat'];
+  const labelTypeOptions = ['Damask Woven', 'Printed Satin', 'Heat Transfer Tagless', 'Leather / Jacron Patch', 'Paper Sticker', 'Tag Label', 'Woven Taffeta'];
+  const labelGenreOptions = ['Main Label', 'Size label', 'Main+Size Label', 'Wash Care', 'COO', 'Flag Label', 'Hem Tag', 'Side Label'];
+  const fgTypeOptions = ['Polo', 'T-Shirt', 'Hoodie', 'Sweatshirt', 'Joggers', 'Jacket', 'Shorts', 'Tracksuit'];
+  const qcRemarkOptions = [
+    'Clean / OK - Flawless fabric',
+    'Minor shade variation',
+    'Knitting snags / holes',
+    'Oil stain on selvedge',
+    'Dia measurement deviation',
+    'Weight out of tolerance',
+    'Slider sticking / rough action',
+    'Color mismatch against approved swatch'
+  ];
+
+  // Master Entities & Categorized Lists
   let vendorOptions = $derived((masters.vendors || []).map(v => ({ value: v.name, label: v.name })));
-  let colorOptions = $derived((masters.colors || []).map(c => ({ value: c.display_name, label: c.display_name })));
-  let locationOptions = $derived((masters.locations || []).map(l => ({ value: l.code, label: `${l.code} - ${l.display_name}` })));
-  let uomOptions = $derived((masters.uoms || []).map(u => ({ value: u.code, label: u.display_name })));
+  let colorOptions = $derived((masters.colors || []).map(c => ({ value: c.display_name, label: c.display_name, code: c.code })));
+  let locationOptions = $derived((masters.locations || []).map(l => ({ value: l.code, label: `${l.code} - ${l.display_name}`, code: l.code })));
+  let uomOptions = $derived((masters.uoms || []).map(u => ({ value: u.code, label: u.display_name, code: u.code })));
 
   let fabricOptions = $derived((masters.fabrics || []).map(f => ({ value: f.display_name, label: f.display_name })));
+  let vendorFabOptions = $derived.by(() => {
+    const list = [];
+    for (const f of (masters.fabrics || [])) {
+      if (f.meta?.vendorFabName) list.push({ value: f.meta.vendorFabName, label: f.meta.vendorFabName });
+      else list.push({ value: f.display_name, label: f.display_name });
+    }
+    return list;
+  });
+
   let zipOptions = $derived((masters.zips || []).map(z => ({ value: z.display_name, label: z.display_name })));
   let trimOptions = $derived((masters.trims || []).map(t => ({ value: t.display_name, label: t.display_name })));
-  let packagingOptions = $derived((masters.packagings || []).map(p => ({ value: p.display_name, label: p.display_name })));
+  let packagingOptions = $derived((masters.packaging || []).map(p => ({ value: p.display_name, label: p.display_name })));
   let labelOptions = $derived((masters.labels || []).map(l => ({ value: l.display_name, label: l.display_name })));
   let productOptions = $derived((masters.products || []).map(p => ({ value: p.display_name, label: p.display_name })));
 
@@ -124,6 +171,34 @@
       case 'Finished Goods': return productOptions;
       default: return [];
     }
+  });
+
+  let vendorProductOptions = $derived.by(() => {
+    switch (gateInwardType) {
+      case 'Fabric': return vendorFabOptions;
+      case 'Zips': return zipOptions;
+      case 'Packaging': return packagingOptions;
+      case 'Trims': return trimOptions;
+      case 'Labels': return labelOptions;
+      case 'Finished Goods': return productOptions;
+      default: return [];
+    }
+  });
+
+  // Dynamic suggested bundle sizes based on inward type
+  let suggestedBundleSizes = $derived.by(() => {
+    if (gateInwardType === 'Fabric') {
+      return standardDiaOptions.map(d => `${d} / ${gateInvoiceGsm || 180} GSM`);
+    } else if (gateInwardType === 'Zips') {
+      return ['5.0', '6.0', '7.0', '8.0', '60 cm', '65 cm', '70 cm', '75 cm', '80 cm'];
+    } else if (gateInwardType === 'Trims') {
+      return trimSizeOptions;
+    } else if (gateInwardType === 'Packaging') {
+      return ['1.0', '2.0', '3.0', '2.7"', 'Small', 'Medium', 'Large', 'Standard / Free'];
+    } else if (gateInwardType === 'Finished Goods') {
+      return ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', 'Free'];
+    }
+    return ['Standard', 'Small', 'Medium', 'Large'];
   });
 
   // Default UOM per inward type
@@ -149,7 +224,7 @@
         sequence: i,
         total: count,
         bundleCode: `${pCode}-${i}/${count}`,
-        sizeSpec: existing.sizeSpec || (gateInwardType === 'Fabric' ? `${gateDia}" / ${gateInvoiceGsm} GSM` : ''),
+        sizeSpec: existing.sizeSpec || (gateInwardType === 'Fabric' ? `${gateDia} / ${gateInvoiceGsm} GSM` : ''),
         rate: existing.rate !== undefined && existing.rate !== '' ? existing.rate : rateVal,
         status: 'Pending'
       });
@@ -200,7 +275,7 @@
       if (gateInwardType === 'Fabric') {
         attrs.fabricType = gateFabricType;
         attrs.invoiceGsm = parseFloat(gateInvoiceGsm) || 0;
-        attrs.dia = parseFloat(gateDia) || 0;
+        attrs.dia = parseFloat(gateDia.replace(/[^0-9.]/g, '')) || 0;
         attrs.composition = gateComposition;
         attrs.rate = parseFloat(gateFabricRate) || 0;
         attrs.vendorFabName = gateVendorProduct;
@@ -261,12 +336,10 @@
         window.showToast(`✓ Gate Inward ${res.parentCode} booked! (${res.bundles.length} roll stubs generated)`, 'success');
       }
 
-      // Refresh parent code and queues
       const bookedCode = gateParentCode;
       await refreshParentCode();
       await refreshQueues();
 
-      // Offer immediate transition to Station 1B
       if (confirm(`Lot ${bookedCode} successfully staged at dock!\n\nWould you like to switch to Station 1B (Floor Count) to weigh & reconcile this lot now?`)) {
         activeStation = '1B';
         await selectLotForFloorCount(bookedCode);
@@ -297,21 +370,19 @@
       floorLocationBin = detail.bundles[0]?.locationBin || 'A/R01/S01';
       floorComments = detail.lot.remarks || '';
 
-      // Initialize bundles with default split if 0
       const bList = detail.bundles.map(b => ({
         bundleCode: b.bundleCode,
         sequence: b.bundleSequence,
         countedQty: b.inwardQty > 0 ? b.inwardQty : (detail.lot.invoiceQty / (detail.bundles.length || 1)),
         locationBin: b.locationBin || 'A/R01/S01',
-        measuredGsm: b.measuredGsm || detail.lot.attrs?.invoiceGsm || 180,
-        measuredDia: b.measuredDia || detail.lot.attrs?.dia || 60,
+        measuredGsm: String(b.measuredGsm || detail.lot.attrs?.invoiceGsm || '180'),
+        measuredDia: String(b.measuredDia || detail.lot.attrs?.dia || '60"'),
         sizeSpec: b.sizeSpec || '',
         rate: b.rate || detail.lot.unit_rate || 0,
         comment: b.bundleComment || ''
       }));
       floorBundles = bList;
 
-      // Default size lines for sized items
       if (detail.lot.inwardType === 'Finished Goods' || detail.lot.inwardType === 'Zips' || detail.lot.inwardType === 'Trims') {
         floorSizeLines = [
           { size: 'S', invoiced: 0, counted: 0, comment: '' },
@@ -329,7 +400,6 @@
     }
   }
 
-  // Reactive Floor Count Discrepancy Sensor
   let floorDiscrepancy = $derived.by(() => {
     const invQ = parseFloat(floorInvoicedQty) || 0;
     const cntQ = parseFloat(floorCountedQty) || 0;
@@ -374,7 +444,6 @@
     }
   });
 
-  // Distribute total evenly across bundles
   function distributeFloorCountEvenly() {
     const total = parseFloat(floorCountedQty) || 0;
     const count = floorBundles.length;
@@ -392,7 +461,6 @@
     floorBundles = list;
   }
 
-  // Auto-sum bundle weights into floorCountedQty
   function autoSumFloorBundles() {
     let sum = 0;
     for (const b of floorBundles) {
@@ -424,8 +492,8 @@
           sequence: b.sequence,
           countedQty: parseFloat(b.countedQty) || 0,
           locationBin: b.locationBin || floorLocationBin,
-          measuredGsm: parseFloat(b.measuredGsm) || 0,
-          measuredDia: parseFloat(b.measuredDia) || 0,
+          measuredGsm: parseFloat(String(b.measuredGsm).replace(/[^0-9.]/g, '')) || 0,
+          measuredDia: parseFloat(String(b.measuredDia).replace(/[^0-9.]/g, '')) || 0,
           sizeSpec: b.sizeSpec,
           rate: parseFloat(b.rate) || 0,
           comment: b.comment
@@ -497,7 +565,7 @@
         inwardQty: b.inwardQty,
         locationBin: b.locationBin,
         sizeSpec: b.sizeSpec,
-        qcStatus: b.qcStatus === 'Pending' ? 'Passed' : b.qcStatus, // Default preview to Passed
+        qcStatus: b.qcStatus === 'Pending' ? 'Passed' : b.qcStatus,
         qcRemarks: b.qcRemarks || '',
         qcImageUrl: b.qcImageUrl || '',
         isUploading: false
@@ -556,7 +624,6 @@
       await refreshQueues();
       await selectLotForQC(qcSelectedLotCode);
 
-      // If lot completed, offer to open Zebra thermal tag modal
       if (res.lotCompleted) {
         openAllZebraTags();
       }
@@ -674,7 +741,7 @@
   <!-- ========================================================= -->
   {#if activeStation === '1A'}
     <form onsubmit={handleGateSubmit} class="station-form">
-      <!-- Universal Inward Section -->
+      <!-- Universal Inward Section with Comboboxes -->
       <section class="card section-card">
         <div class="section-header">
           <h3>1. Gate Intake & Commercial Invoice Header</h3>
@@ -696,24 +763,25 @@
             <input id="gate-date" type="date" class="form-control" bind:value={gateInwardDate} required />
           </div>
 
+          <!-- Inward Type via Combobox -->
           <div class="form-group">
-            <label for="gate-type">Inward Type (Material Genre)</label>
-            <select id="gate-type" class="form-control" bind:value={gateInwardType} required>
-              <option value="Fabric">Fabric (Knitted / Woven / Rib)</option>
-              <option value="Zips">Zips (Nylon / Metal / Vislon)</option>
-              <option value="Packaging">Packaging (Polybag / Carton / Hanger)</option>
-              <option value="Trims">Trims (Buttons / Elastic / Drawcord)</option>
-              <option value="Finished Goods">Finished Goods (Polo / Hoodie / Tees)</option>
-              <option value="Labels">Labels (Woven / Care / Size)</option>
-            </select>
+            <span class="form-label-title">Inward Type (Material Genre)</span>
+            <Combobox 
+              options={inwardTypeOptions} 
+              bind:value={gateInwardType} 
+              placeholder="Select inward type..." 
+              allowCustom={false} 
+            />
           </div>
 
+          <!-- Supplier / Vendor via Combobox -->
           <div class="form-group">
-            <label for="gate-vendor">Supplier / Vendor Entity</label>
+            <span class="form-label-title">Supplier / Vendor Entity</span>
             <Combobox 
               options={vendorOptions} 
               bind:value={gateVendorName} 
               placeholder="Search or enter supplier name..." 
+              category="vendor"
               allowCustom={true} 
             />
           </div>
@@ -725,184 +793,284 @@
 
           <div class="form-group">
             <label for="gate-inv-qty">Billed Invoice Quantity</label>
-            <div class="input-with-unit">
-              <input id="gate-inv-qty" type="number" step="0.01" class="form-control" bind:value={gateInvoiceQty} placeholder="0.00" required />
-              <select class="unit-select" bind:value={gateUom}>
-                {#each uomOptions as u}
-                  <option value={u.value}>{u.value}</option>
-                {/each}
-              </select>
-            </div>
+            <input id="gate-inv-qty" type="number" step="0.01" class="form-control" bind:value={gateInvoiceQty} placeholder="0.00" required />
+          </div>
+
+          <!-- UOM via Combobox -->
+          <div class="form-group">
+            <span class="form-label-title">Unit of Measure (UOM)</span>
+            <Combobox 
+              options={uomOptions} 
+              bind:value={gateUom} 
+              placeholder="e.g. Kgs, Pcs, Meter..." 
+              category="uom"
+              allowCustom={true} 
+            />
           </div>
 
           <div class="form-group">
             <label for="gate-inv-amt">Invoice Total Amount (₹)</label>
             <input id="gate-inv-amt" type="number" step="0.01" class="form-control" bind:value={gateInvoiceAmount} placeholder="₹ 0.00" />
             {#if gateInvoiceAmount && gateInvoiceQty > 0}
-              <span class="help-text">Calculated Unit Rate: ₹{(parseFloat(gateInvoiceAmount)/parseFloat(gateInvoiceQty)).toFixed(2)} / {gateUom}</span>
+              <span class="help-text">Unit Rate: ₹{(parseFloat(gateInvoiceAmount)/parseFloat(gateInvoiceQty)).toFixed(2)} / {gateUom}</span>
             {/if}
           </div>
 
           <div class="form-group">
-            <label for="gate-bundles">Number of Rolls / Bundles to Generate</label>
+            <label for="gate-bundles">Number of Rolls / Bundles</label>
             <input id="gate-bundles" type="number" min="1" max="100" class="form-control" bind:value={gateNoOfBundles} required />
-            <span class="help-text">Generates bundle stubs <code>{gateParentCode || 'YYMMDD-A'}-1/{gateNoOfBundles}</code> .. <code>{gateNoOfBundles}/{gateNoOfBundles}</code></span>
+            <span class="help-text">Generates <code>{gateParentCode || 'YYMMDD-A'}-1/{gateNoOfBundles}</code> .. <code>{gateNoOfBundles}/{gateNoOfBundles}</code></span>
           </div>
         </div>
 
-        <div class="form-grid" style="margin-top: 12px;">
+        <div class="form-grid" style="margin-top: 14px;">
+          <!-- Vendor Product via Combobox -->
           <div class="form-group">
-            <label for="gate-vp">Vendor Product Name</label>
-            <input id="gate-vp" class="form-control" bind:value={gateVendorProduct} placeholder="What the vendor calls this item..." />
-          </div>
-
-          <div class="form-group">
-            <label for="gate-fpccp">FPCC Internal Master Product</label>
+            <span class="form-label-title">Vendor Product Name</span>
             <Combobox 
-              options={fpccProductOptions} 
-              bind:value={gateFpccProduct} 
-              placeholder="Search internal item master..." 
+              options={vendorProductOptions} 
+              bind:value={gateVendorProduct} 
+              placeholder="What vendor calls this item..." 
               allowCustom={true} 
             />
           </div>
 
+          <!-- FPCC Product via Combobox -->
           <div class="form-group">
-            <label for="gate-vc">Vendor Color</label>
-            <input id="gate-vc" class="form-control" bind:value={gateVendorColor} placeholder="Supplier shade name..." />
+            <span class="form-label-title">FPCC Master Item Name</span>
+            <Combobox 
+              options={fpccProductOptions} 
+              bind:value={gateFpccProduct} 
+              placeholder="Standard internal item name..." 
+              allowCustom={true} 
+            />
           </div>
 
+          <!-- Vendor Color via Combobox -->
           <div class="form-group">
-            <label for="gate-fpccc">FPCC Internal Color</label>
+            <span class="form-label-title">Vendor Color Shade</span>
+            <Combobox 
+              options={colorOptions} 
+              bind:value={gateVendorColor} 
+              placeholder="Vendor shade name..." 
+              category="color"
+              allowCustom={true} 
+            />
+          </div>
+
+          <!-- FPCC Color via Combobox -->
+          <div class="form-group">
+            <span class="form-label-title">FPCC Internal Color</span>
             <Combobox 
               options={colorOptions} 
               bind:value={gateFpccColor} 
               placeholder="Standard master shade..." 
+              category="color"
               allowCustom={true} 
             />
           </div>
         </div>
 
-        <div class="form-group" style="margin-top: 12px;">
+        <div class="form-group" style="margin-top: 14px;">
           <label for="gate-comm">Gate Inward Remarks / Delivery Notes</label>
           <input id="gate-comm" class="form-control" bind:value={gateComment} placeholder="e.g. Delivery challan attached, truck MH-12-8802..." />
         </div>
       </section>
 
-      <!-- Conditional Specs Section depending on Inward Type -->
+      <!-- Conditional Specs Section: 100% Uniform Comboboxes -->
       <section class="card section-card">
         <div class="section-header">
           <h3>2. Conditional Type Specifications ({gateInwardType})</h3>
-          <span class="badge badge-info">Contextual Master Specs</span>
+          <span class="badge badge-info">Dropdown Sheet Master Values</span>
         </div>
 
         {#if gateInwardType === 'Fabric'}
           <div class="form-grid">
             <div class="form-group">
-              <label for="gate-fab-type">Fabric Construction</label>
-              <select id="gate-fab-type" class="form-control" bind:value={gateFabricType}>
-                <option value="Knitted">Knitted</option>
-                <option value="Woven">Woven</option>
-                <option value="Single Jersey">Single Jersey</option>
-                <option value="Pique">Pique</option>
-                <option value="Fleece">Fleece</option>
-                <option value="Rib">Rib 1x1 / 2x2</option>
-                <option value="Interlock">Interlock</option>
-              </select>
+              <span class="form-label-title">Fabric Construction / Type</span>
+              <Combobox 
+                options={fabricTypeOptions} 
+                bind:value={gateFabricType} 
+                placeholder="e.g. Single Jersey, Pique, Rib..." 
+                allowCustom={true} 
+              />
             </div>
+
             <div class="form-group">
-              <label for="gate-gsm">Billed Invoice GSM</label>
-              <input id="gate-gsm" type="number" class="form-control" bind:value={gateInvoiceGsm} placeholder="e.g. 180" />
+              <span class="form-label-title">Billed Invoice GSM</span>
+              <Combobox 
+                options={standardGsmOptions} 
+                bind:value={gateInvoiceGsm} 
+                placeholder="e.g. 180, 220, 240..." 
+                allowCustom={true} 
+              />
             </div>
+
             <div class="form-group">
-              <label for="gate-dia">Invoice Dia (Inches)</label>
-              <input id="gate-dia" type="number" class="form-control" bind:value={gateDia} placeholder="e.g. 60" />
+              <span class="form-label-title">Invoice Dia (Inches)</span>
+              <Combobox 
+                options={standardDiaOptions} 
+                bind:value={gateDia} 
+                placeholder="e.g. 30 in, 60 in..." 
+                allowCustom={true} 
+              />
             </div>
+
             <div class="form-group">
-              <label for="gate-comp">Fiber Composition</label>
-              <input id="gate-comp" class="form-control" bind:value={gateComposition} placeholder="e.g. 100% Super Combed Cotton" />
+              <span class="form-label-title">Fiber Composition</span>
+              <Combobox 
+                options={compositionOptions} 
+                bind:value={gateComposition} 
+                placeholder="e.g. 100% Cotton, 95/5 Cotton Lycra..." 
+                allowCustom={true} 
+              />
             </div>
+
             <div class="form-group">
               <label for="gate-fab-rate">Fabric Unit Rate (₹/Kg)</label>
-              <input id="gate-fab-rate" type="number" step="0.01" class="form-control" bind:value={gateFabricRate} placeholder="₹ per Kg" />
+              <input id="gate-fab-rate" type="number" step="0.01" class="form-control" bind:value={gateFabricRate} placeholder="Rate ₹ per Kg" />
             </div>
           </div>
         {:else if gateInwardType === 'Zips'}
           <div class="form-grid">
             <div class="form-group">
-              <label for="gate-zip-vname">Vendor Zip Name</label>
-              <input id="gate-zip-vname" class="form-control" bind:value={gateVendorZipName} placeholder="e.g. No 5 Antique Brass" />
+              <span class="form-label-title">Vendor Zip Name</span>
+              <Combobox 
+                options={zipOptions} 
+                bind:value={gateVendorZipName} 
+                placeholder="e.g. No 5 Antique Brass..." 
+                category="zip"
+                allowCustom={true} 
+              />
             </div>
+
             <div class="form-group">
-              <label for="gate-zip-type">Zip Type</label>
-              <select id="gate-zip-type" class="form-control" bind:value={gateZipType}>
-                <option value="Metal">Metal</option>
-                <option value="Nylon">Nylon Coil</option>
-                <option value="Vislon">Vislon Molded Plastic</option>
-                <option value="Invisible">Invisible Concealed</option>
-                <option value="Waterproof">Waterproof PU Coated</option>
-              </select>
+              <span class="form-label-title">Zip Type</span>
+              <Combobox 
+                options={zipTypeOptions} 
+                bind:value={gateZipType} 
+                placeholder="Select zip type..." 
+                allowCustom={true} 
+              />
             </div>
+
             <div class="form-group">
-              <label for="gate-zip-slider">Slider Spec</label>
-              <select id="gate-zip-slider" class="form-control" bind:value={gateSlider}>
-                <option value="Auto-lock">Auto-lock</option>
-                <option value="Non-lock">Non-lock</option>
-                <option value="Pin-lock">Pin-lock</option>
-                <option value="Reversible">Reversible</option>
-              </select>
+              <span class="form-label-title">Slider Spec</span>
+              <Combobox 
+                options={zipSliderOptions} 
+                bind:value={gateSlider} 
+                placeholder="Slider spec..." 
+                allowCustom={true} 
+              />
             </div>
+
             <div class="form-group">
-              <label for="gate-zip-closure">Closure Mechanism</label>
-              <select id="gate-zip-closure" class="form-control" bind:value={gateClosure}>
-                <option value="Open-end">Open-end (Jacket)</option>
-                <option value="Close-end">Close-end (Trousers/Pockets)</option>
-                <option value="Two-way open-end">Two-way Open End</option>
-              </select>
+              <span class="form-label-title">Closure Mechanism</span>
+              <Combobox 
+                options={zipClosureOptions} 
+                bind:value={gateClosure} 
+                placeholder="Open-end, Close-end..." 
+                allowCustom={true} 
+              />
             </div>
+
             <div class="form-group">
-              <label for="gate-zip-teeth">Teeth Finish / Color</label>
-              <input id="gate-zip-teeth" class="form-control" bind:value={gateTeethColor} placeholder="e.g. Antique Brass, Gunmetal" />
+              <span class="form-label-title">Teeth Finish / Color</span>
+              <Combobox 
+                options={teethColorOptions} 
+                bind:value={gateTeethColor} 
+                placeholder="Teeth color finish..." 
+                allowCustom={true} 
+              />
             </div>
+
             <div class="form-group">
-              <label for="gate-zip-tape">Tape Color</label>
-              <input id="gate-zip-tape" class="form-control" bind:value={gateTapeColor} placeholder="Tape shade..." />
+              <span class="form-label-title">Tape Color</span>
+              <Combobox 
+                options={colorOptions} 
+                bind:value={gateTapeColor} 
+                placeholder="Zip tape color..." 
+                category="color"
+                allowCustom={true} 
+              />
             </div>
           </div>
         {:else if gateInwardType === 'Packaging'}
           <div class="form-grid">
             <div class="form-group">
-              <label for="gate-pkg-type">Packaging Type</label>
-              <select id="gate-pkg-type" class="form-control" bind:value={gatePackagingType}>
-                <option value="Polybag">Polybag (Self-Adhesive)</option>
-                <option value="Corrugated Box">Corrugated Master Carton</option>
-                <option value="Hanger">Garment Hanger</option>
-                <option value="Silica Gel">Silica Gel Pouch</option>
-                <option value="Barcode Sticker">Barcode / Price Tag Sticker</option>
-              </select>
+              <span class="form-label-title">Packaging Type</span>
+              <Combobox 
+                options={packagingTypeOptions} 
+                bind:value={gatePackagingType} 
+                placeholder="Select packaging type..." 
+                allowCustom={true} 
+              />
             </div>
+
             <div class="form-group">
-              <label for="gate-pkg-vname">Vendor Packaging Name</label>
-              <input id="gate-pkg-vname" class="form-control" bind:value={gateVendorPackagingName} placeholder="Supplier packaging name..." />
+              <span class="form-label-title">FPCC Packaging Master Name</span>
+              <Combobox 
+                options={packagingOptions} 
+                bind:value={gateFpccProduct} 
+                placeholder="Internal packaging item..." 
+                category="packaging"
+                allowCustom={true} 
+              />
+            </div>
+
+            <div class="form-group">
+              <span class="form-label-title">Vendor Packaging Name</span>
+              <Combobox 
+                options={packagingOptions} 
+                bind:value={gateVendorPackagingName} 
+                placeholder="Supplier packaging name..." 
+                allowCustom={true} 
+              />
             </div>
           </div>
         {:else if gateInwardType === 'Trims'}
           <div class="form-grid">
             <div class="form-group">
-              <label for="gate-trm-type">Trim Type</label>
-              <select id="gate-trm-type" class="form-control" bind:value={gateTrimType}>
-                <option value="Button">Button (Horn / Poly / Metal)</option>
-                <option value="Rivet">Rivet</option>
-                <option value="Eyelet">Eyelet</option>
-                <option value="Drawcord">Drawcord / Drawstring</option>
-                <option value="Elastic">Knitted / Woven Elastic</option>
-                <option value="Twill Tape">Twill Tape</option>
-                <option value="Badge">Silicone / Metal Badge</option>
-              </select>
+              <span class="form-label-title">Trim Type</span>
+              <Combobox 
+                options={trimTypeOptions} 
+                bind:value={gateTrimType} 
+                placeholder="Select trim type..." 
+                allowCustom={true} 
+              />
             </div>
+
             <div class="form-group">
-              <label for="gate-trm-size">Size Spec</label>
-              <input id="gate-trm-size" class="form-control" bind:value={gateTrimSize} placeholder="e.g. 18L, 24L, 20mm" />
+              <span class="form-label-title">Size Spec</span>
+              <Combobox 
+                options={trimSizeOptions} 
+                bind:value={gateTrimSize} 
+                placeholder="Size e.g. 18L, 24L, 20mm..." 
+                allowCustom={true} 
+              />
             </div>
+
+            <div class="form-group">
+              <span class="form-label-title">FPCC Master Trim Name</span>
+              <Combobox 
+                options={trimOptions} 
+                bind:value={gateFpccProduct} 
+                placeholder="Internal trim name..." 
+                category="trim"
+                allowCustom={true} 
+              />
+            </div>
+
+            <div class="form-group">
+              <span class="form-label-title">Vendor Trim Name</span>
+              <Combobox 
+                options={trimOptions} 
+                bind:value={gateVendorTrimName} 
+                placeholder="Supplier trim name..." 
+                allowCustom={true} 
+              />
+            </div>
+
             <div class="form-group">
               <label for="gate-trm-rate">Unit Rate (₹)</label>
               <input id="gate-trm-rate" type="number" step="0.01" class="form-control" bind:value={gateTrimRate} placeholder="Rate per unit" />
@@ -911,46 +1079,62 @@
         {:else if gateInwardType === 'Finished Goods'}
           <div class="form-grid">
             <div class="form-group">
-              <label for="gate-fg-type">Garment Style Type</label>
-              <select id="gate-fg-type" class="form-control" bind:value={gateFgType}>
-                <option value="Polo">Classic Polo Shirt</option>
-                <option value="T-Shirt">Crewneck T-Shirt</option>
-                <option value="Hoodie">Pullover Hoodie</option>
-                <option value="Sweatshirt">Sweatshirt</option>
-                <option value="Joggers">Joggers / Sweatpants</option>
-              </select>
+              <span class="form-label-title">Garment Style Type</span>
+              <Combobox 
+                options={fgTypeOptions} 
+                bind:value={gateFgType} 
+                placeholder="Select garment style..." 
+                allowCustom={true} 
+              />
             </div>
+
             <div class="form-group">
-              <label for="gate-fg-vname">Vendor Style Code / Name</label>
-              <input id="gate-fg-vname" class="form-control" bind:value={gateVendorFgName} placeholder="Supplier garment code..." />
+              <span class="form-label-title">Vendor Style Code / Name</span>
+              <Combobox 
+                options={productOptions} 
+                bind:value={gateVendorFgName} 
+                placeholder="Supplier style name..." 
+                allowCustom={true} 
+              />
+            </div>
+
+            <div class="form-group">
+              <span class="form-label-title">FPCC Master Product</span>
+              <Combobox 
+                options={productOptions} 
+                bind:value={gateFpccProduct} 
+                placeholder="Internal garment product..." 
+                category="product"
+                allowCustom={true} 
+              />
             </div>
           </div>
         {:else if gateInwardType === 'Labels'}
           <div class="form-grid">
             <div class="form-group">
-              <label for="gate-lbl-type">Label Substrate</label>
-              <select id="gate-lbl-type" class="form-control" bind:value={gateLabelType}>
-                <option value="Woven">Damask Woven</option>
-                <option value="Printed">Printed Satin</option>
-                <option value="Heat Transfer">Heat Transfer Tagless</option>
-                <option value="Leather Patch">Leather / Jacron Patch</option>
-              </select>
+              <span class="form-label-title">Label Substrate / Type</span>
+              <Combobox 
+                options={labelTypeOptions} 
+                bind:value={gateLabelType} 
+                placeholder="Select label substrate..." 
+                allowCustom={true} 
+              />
             </div>
+
             <div class="form-group">
-              <label for="gate-lbl-genre">Label Function / Genre</label>
-              <select id="gate-lbl-genre" class="form-control" bind:value={gateLabelGenre}>
-                <option value="Main Label">Main Brand Label</option>
-                <option value="Wash Care">Wash Care & Composition</option>
-                <option value="Size Tab">Size Indicator Tab</option>
-                <option value="Flag Label">Side Seam Flag Label</option>
-                <option value="Hem Tag">Bottom Hem Woven Tag</option>
-              </select>
+              <span class="form-label-title">Label Function / Genre</span>
+              <Combobox 
+                options={labelGenreOptions} 
+                bind:value={gateLabelGenre} 
+                placeholder="Main, washcare, size..." 
+                allowCustom={true} 
+              />
             </div>
           </div>
         {/if}
       </section>
 
-      <!-- Bundle Stubs Preview (Per bundle size and rate) -->
+      <!-- Bundle Stubs Preview with Combobox Size Specs -->
       <section class="card section-card">
         <div class="section-header">
           <h3>3. Bundle Stubs Generation Preview (N = {gateBundles.length})</h3>
@@ -958,8 +1142,8 @@
         </div>
 
         <p class="section-desc">
-          The system will auto-generate {gateBundles.length} individual bundle stubs with format 
-          <code>{gateParentCode || 'YYMMDD-A'}-1/{gateBundles.length}</code>. You can customize per-bundle size and rates below.
+          Auto-generates {gateBundles.length} individual roll stubs formatted as 
+          <code>{gateParentCode || 'YYMMDD-A'}-1/{gateBundles.length}</code> with uniform Combobox size specifications.
         </p>
 
         <div class="table-container">
@@ -968,21 +1152,22 @@
               <tr>
                 <th style="width: 80px;">Roll #</th>
                 <th>Generated Bundle Code</th>
-                <th>Size / Dimensions Spec</th>
-                <th>Unit Rate (₹)</th>
+                <th style="min-width: 220px;">Size / Dimensions Spec</th>
+                <th style="width: 140px;">Unit Rate (₹)</th>
                 <th>Initial Status</th>
               </tr>
             </thead>
             <tbody>
-              {#each gateBundles as b, idx}
+              {#each gateBundles as b}
                 <tr>
                   <td><strong>#{b.sequence}</strong></td>
                   <td><span class="code-pill">{b.bundleCode}</span></td>
                   <td>
-                    <input 
-                      class="form-control form-control-sm" 
+                    <Combobox 
+                      options={suggestedBundleSizes} 
                       bind:value={b.sizeSpec} 
-                      placeholder="Size spec e.g. 60 cm, 24L, XL..." 
+                      placeholder="Size spec e.g. 60 in, 24L, XL..." 
+                      allowCustom={true} 
                     />
                   </td>
                   <td>
@@ -1021,7 +1206,6 @@
   <!-- ========================================================= -->
   {#if activeStation === '1B'}
     <div class="station-container">
-      <!-- Awaiting Floor Count Queue Selector -->
       <section class="card section-card">
         <div class="section-header">
           <h3>Select Lot for Physical Floor Count</h3>
@@ -1058,7 +1242,6 @@
 
       {#if floorLotDetail}
         <form onsubmit={handleFloorSubmit} class="station-form">
-          <!-- Lot Details & Discrepancy Sensor -->
           <section class="card section-card">
             <div class="section-header">
               <div>
@@ -1083,7 +1266,6 @@
               </div>
             </div>
 
-            <!-- Invoiced vs Actual Counted Row -->
             <div class="form-grid" style="margin-top: 16px;">
               <div class="form-group">
                 <label for="floor-inv-q">Official Invoiced Quantity ({floorLotDetail.lot.uom})</label>
@@ -1095,7 +1277,7 @@
                 <label for="floor-act-q">Actual Physical Counted Quantity ({floorLotDetail.lot.uom})</label>
                 <div class="input-with-action">
                   <input id="floor-act-q" type="number" step="0.01" class="form-control" bind:value={floorCountedQty} required />
-                  <button type="button" class="btn btn-secondary btn-sm" onclick={distributeFloorCountEvenly} title="Split evenly across all rolls">
+                  <button type="button" class="btn btn-secondary btn-sm" onclick={distributeFloorCountEvenly} title="Split evenly across rolls">
                     ➗ Split
                   </button>
                   <button type="button" class="btn btn-secondary btn-sm" onclick={autoSumFloorBundles} title="Sum from bundle table">
@@ -1105,12 +1287,14 @@
                 <span class="help-text">Weighed scale weight or physical tally</span>
               </div>
 
+              <!-- Warehouse Staging Bin via Combobox -->
               <div class="form-group">
-                <label for="floor-bin">Warehouse Staging Bin Location</label>
+                <span class="form-label-title">Warehouse Staging Bin Location</span>
                 <Combobox 
                   options={locationOptions} 
                   bind:value={floorLocationBin} 
-                  placeholder="Select or enter warehouse bin e.g. A/R01/S01..." 
+                  placeholder="Select warehouse bin e.g. A/R01/S01..." 
+                  category="location"
                   allowCustom={true} 
                 />
               </div>
@@ -1137,7 +1321,6 @@
               </div>
             {/if}
 
-            <!-- Shortage Hold Actions (If Lot is already in DISCREPANCY_HOLD) -->
             {#if floorLotDetail.lot.stage === 'DISCREPANCY_HOLD'}
               <div class="hold-actions-box">
                 <h4>⚠️ This Lot is on DISCREPANCY_HOLD</h4>
@@ -1154,7 +1337,7 @@
             {/if}
           </section>
 
-          <!-- Per-Bundle Physical Breakdown Table -->
+          <!-- Per-Bundle Physical Breakdown with Uniform Comboboxes -->
           <section class="card section-card">
             <div class="section-header">
               <h3>Roll Breakdown & Warehouse Bin Allocation ({floorBundles.length} Bundles)</h3>
@@ -1173,14 +1356,14 @@
                 <thead>
                   <tr>
                     <th>Bundle Code</th>
-                    <th>Counted Qty ({floorLotDetail.lot.uom})</th>
-                    <th>Warehouse Bin Location</th>
+                    <th style="width: 140px;">Counted Qty ({floorLotDetail.lot.uom})</th>
+                    <th style="min-width: 180px;">Warehouse Bin Location</th>
                     {#if floorLotDetail.lot.inwardType === 'Fabric'}
-                      <th>Measured GSM</th>
-                      <th>Measured Dia</th>
+                      <th style="width: 130px;">Measured GSM</th>
+                      <th style="width: 130px;">Measured Dia</th>
                     {:else}
-                      <th>Size Spec</th>
-                      <th>Rate (₹)</th>
+                      <th style="min-width: 160px;">Size Spec</th>
+                      <th style="width: 120px;">Rate (₹)</th>
                     {/if}
                     <th>Roll Remarks</th>
                   </tr>
@@ -1200,36 +1383,42 @@
                         />
                       </td>
                       <td>
-                        <input 
-                          class="form-control form-control-sm" 
+                        <!-- Uniform Location Combobox per bundle -->
+                        <Combobox 
+                          options={locationOptions} 
                           bind:value={b.locationBin} 
-                          placeholder="e.g. A/R01/S01" 
-                          required 
+                          placeholder="Bin location..." 
+                          category="location"
+                          allowCustom={true} 
                         />
                       </td>
                       {#if floorLotDetail.lot.inwardType === 'Fabric'}
                         <td>
-                          <input 
-                            type="number" 
-                            class="form-control form-control-sm" 
+                          <!-- Uniform GSM Combobox -->
+                          <Combobox 
+                            options={standardGsmOptions} 
                             bind:value={b.measuredGsm} 
                             placeholder="GSM" 
+                            allowCustom={true} 
                           />
                         </td>
                         <td>
-                          <input 
-                            type="number" 
-                            class="form-control form-control-sm" 
+                          <!-- Uniform Dia Combobox -->
+                          <Combobox 
+                            options={standardDiaOptions} 
                             bind:value={b.measuredDia} 
                             placeholder="Dia" 
+                            allowCustom={true} 
                           />
                         </td>
                       {:else}
                         <td>
-                          <input 
-                            class="form-control form-control-sm" 
+                          <!-- Uniform Size Spec Combobox -->
+                          <Combobox 
+                            options={suggestedBundleSizes} 
                             bind:value={b.sizeSpec} 
                             placeholder="Size" 
+                            allowCustom={true} 
                           />
                         </td>
                         <td>
@@ -1280,7 +1469,6 @@
   <!-- ========================================================= -->
   {#if activeStation === '1C'}
     <div class="station-container">
-      <!-- Awaiting QC Queue Selector -->
       <section class="card section-card">
         <div class="section-header">
           <h3>Select Lot for QC Inspection</h3>
@@ -1317,7 +1505,6 @@
 
       {#if qcLotDetail}
         <form onsubmit={handleQCSubmit} class="station-form">
-          <!-- QC Header Dashboard -->
           <section class="card section-card">
             <div class="section-header">
               <div>
@@ -1340,7 +1527,7 @@
                 <input id="qc-insp" class="form-control" bind:value={qcInspector} required />
               </div>
               <div class="form-group">
-                <span style="font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase;">Lot Status</span>
+                <span class="form-label-title">Lot Status</span>
                 <div style="margin-top: 8px;">
                   <span class="badge {qcLotDetail.lot.stage === 'QC_COMPLETE' ? 'badge-success' : 'badge-primary'}">
                     {qcLotDetail.lot.stage}
@@ -1372,7 +1559,6 @@
                       </span>
                     </div>
 
-                    <!-- Binary Pass / Reject Switcher -->
                     <div class="binary-qc-toggle">
                       <button 
                         type="button" 
@@ -1415,19 +1601,14 @@
                       {/if}
                     </div>
 
+                    <!-- Defect Remarks via Combobox with Quick Suggestions -->
                     <div class="qc-remarks-section">
-                      <input 
-                        class="form-control" 
+                      <Combobox 
+                        options={qcRemarkOptions} 
                         bind:value={b.qcRemarks} 
-                        placeholder="Defect remarks or inspection findings..." 
+                        placeholder="Defect remarks or findings..." 
+                        allowCustom={true} 
                       />
-                      <div class="defect-chips">
-                        <button type="button" class="chip-btn" onclick={() => b.qcRemarks = 'Flawless fabric / Passed'}>Clean / OK</button>
-                        <button type="button" class="chip-btn" onclick={() => b.qcRemarks = 'Minor shade variation'}>Shade variation</button>
-                        <button type="button" class="chip-btn" onclick={() => b.qcRemarks = 'Knitting snags / holes'}>Knitting snags</button>
-                        <button type="button" class="chip-btn" onclick={() => b.qcRemarks = 'Oil stain on selvedge'}>Oil stain</button>
-                        <button type="button" class="chip-btn" onclick={() => b.qcRemarks = 'Dia measurement deviation'}>Dia deviation</button>
-                      </div>
                     </div>
 
                     <div class="qc-tag-action">
@@ -1531,12 +1712,12 @@
 
   .station-tab-btn:hover {
     border-color: var(--primary-color);
-    background: rgba(99, 102, 241, 0.04);
+    background: rgba(37, 99, 235, 0.05);
   }
 
   .station-tab-btn.active {
     border-color: var(--primary-color);
-    background: rgba(99, 102, 241, 0.08);
+    background: rgba(37, 99, 235, 0.09);
     box-shadow: 0 0 0 1px var(--primary-color);
   }
 
@@ -1576,6 +1757,7 @@
     margin: 0;
     font-size: 16px;
     font-weight: 700;
+    color: var(--text-main);
   }
 
   .section-desc {
@@ -1596,38 +1778,17 @@
     gap: 6px;
   }
 
-  .form-group label {
-    font-size: 12px;
-    font-weight: 600;
+  .form-group label, .form-label-title {
+    font-size: 11.5px;
+    font-weight: 700;
     color: var(--text-secondary);
     text-transform: uppercase;
-    letter-spacing: 0.03em;
+    letter-spacing: 0.04em;
   }
 
   .input-with-action {
     display: flex;
     gap: 6px;
-  }
-
-  .input-with-unit {
-    display: flex;
-  }
-
-  .input-with-unit input {
-    border-top-right-radius: 0;
-    border-bottom-right-radius: 0;
-  }
-
-  .unit-select {
-    width: 90px;
-    background: var(--bg-subtle);
-    border: 1px solid var(--border-color);
-    border-left: none;
-    border-top-right-radius: var(--radius-sm);
-    border-bottom-right-radius: var(--radius-sm);
-    padding: 0 8px;
-    font-weight: 600;
-    color: var(--text-primary);
   }
 
   .help-text {
@@ -1643,6 +1804,7 @@
     padding: 4px 8px;
     border-radius: 4px;
     border: 1px solid var(--border-color);
+    color: var(--text-primary);
   }
 
   .table-container {
@@ -1660,11 +1822,12 @@
     padding: 10px 12px;
     border-bottom: 1px solid var(--border-color);
     text-align: left;
+    vertical-align: middle;
   }
 
   .data-table th {
     background: var(--bg-subtle);
-    font-weight: 600;
+    font-weight: 700;
     color: var(--text-secondary);
     text-transform: uppercase;
     font-size: 11px;
@@ -1684,21 +1847,21 @@
   }
 
   .discrepancy-banner.danger {
-    background: rgba(239, 68, 68, 0.08);
-    border-color: #ef4444;
-    color: #991b1b;
+    background: var(--alert-danger-bg);
+    border-color: var(--alert-danger-border);
+    color: var(--alert-danger-text);
   }
 
   .discrepancy-banner.warning {
-    background: rgba(245, 158, 11, 0.08);
-    border-color: #f59e0b;
-    color: #92400e;
+    background: var(--alert-warning-bg);
+    border-color: var(--alert-warning-border);
+    color: var(--alert-warning-text);
   }
 
   .discrepancy-banner.success {
-    background: rgba(16, 185, 129, 0.08);
-    border-color: #10b981;
-    color: #065f46;
+    background: var(--alert-success-bg);
+    border-color: var(--alert-success-border);
+    color: var(--alert-success-text);
   }
 
   .discrepancy-title {
@@ -1726,14 +1889,14 @@
 
   .hold-actions-box {
     margin-top: 16px;
-    background: rgba(239, 68, 68, 0.06);
-    border: 1px solid rgba(239, 68, 68, 0.3);
+    background: var(--alert-danger-bg);
+    border: 1px solid var(--alert-danger-border);
     border-radius: var(--radius-md);
     padding: 16px;
   }
 
   .hold-actions-box h4 {
-    color: #b91c1c;
+    color: var(--accent-rose);
     margin: 0 0 6px 0;
   }
 
@@ -1766,7 +1929,7 @@
 
   .lot-chip.selected {
     border-color: var(--primary-color);
-    background: rgba(99, 102, 241, 0.06);
+    background: rgba(37, 99, 235, 0.08);
     box-shadow: 0 0 0 1px var(--primary-color);
   }
 
@@ -1781,6 +1944,7 @@
     font-family: var(--font-mono);
     font-weight: 800;
     font-size: 14px;
+    color: var(--text-main);
   }
 
   .chip-meta {
@@ -1805,12 +1969,12 @@
   }
 
   .qc-bundle-card.rejected {
-    border-left: 5px solid #ef4444;
-    background: rgba(239, 68, 68, 0.02);
+    border-left: 5px solid var(--accent-rose);
+    background: var(--alert-danger-bg);
   }
 
   .qc-bundle-card.passed {
-    border-left: 5px solid #10b981;
+    border-left: 5px solid var(--accent-emerald);
   }
 
   .qc-bundle-header {
@@ -1852,12 +2016,12 @@
   }
 
   .qc-toggle-btn.pass.active {
-    background: #10b981;
+    background: var(--accent-emerald);
     color: #fff;
   }
 
   .qc-toggle-btn.fail.active {
-    background: #ef4444;
+    background: var(--accent-rose);
     color: #fff;
   }
 
@@ -1906,7 +2070,7 @@
     position: absolute;
     top: -6px;
     right: -6px;
-    background: #ef4444;
+    background: var(--accent-rose);
     color: #fff;
     border: none;
     border-radius: 50%;
@@ -1919,27 +2083,8 @@
     justify-content: center;
   }
 
-  .defect-chips {
-    display: flex;
-    gap: 6px;
-    flex-wrap: wrap;
-    margin-top: 6px;
-  }
-
-  .chip-btn {
-    border: 1px solid var(--border-color);
-    background: var(--bg-subtle);
-    border-radius: 12px;
-    padding: 2px 8px;
-    font-size: 10.5px;
-    cursor: pointer;
-    color: var(--text-secondary);
-  }
-
-  .chip-btn:hover {
-    background: var(--primary-color);
-    color: #fff;
-    border-color: var(--primary-color);
+  .qc-remarks-section {
+    width: 100%;
   }
 
   .empty-state {

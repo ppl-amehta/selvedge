@@ -148,7 +148,7 @@ func NewRouter(svc AppServices) http.Handler {
 
 	// 4. Inventory Endpoints
 	r.Route("/api/inventory", func(r chi.Router) {
-		r.Get("/next-parent-code", func(w http.ResponseWriter, req *http.Request) {
+		suggestParentCodeHandler := func(w http.ResponseWriter, req *http.Request) {
 			code, err := svc.Inventory.SuggestNextParentCode()
 			if err != nil {
 				renderError(w, http.StatusInternalServerError, err.Error())
@@ -159,7 +159,10 @@ func NewRouter(svc AppServices) http.Handler {
 				"suggestedCode":  code,
 				"nextParentCode": code,
 			})
-		})
+		}
+
+		r.Get("/next-parent-code", suggestParentCodeHandler)
+		r.Get("/suggest-parent-code", suggestParentCodeHandler)
 
 		r.Post("/inward", func(w http.ResponseWriter, req *http.Request) {
 			var payload inventory.InwardParentLotPayload

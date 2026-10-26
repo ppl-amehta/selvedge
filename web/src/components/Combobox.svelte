@@ -6,6 +6,7 @@
     category = 'item',
     placeholder = 'Type to search or add new...',
     items = [],
+    options = null,
     displayKey = 'display_name',
     valueKey = 'display_name',
     allowCustom = true,
@@ -16,26 +17,46 @@
   let isOpen = $state(false);
   let highlightedIndex = $state(-1);
   let inputEl;
-  let dropdownEl;
+  let dropdownEl = $state(null);
 
-  // Derived filtered options using Svelte 5 Runes
+  // Normalize items/options supporting strings, {label, value}, or master objects
+  let normalizedList = $derived.by(() => {
+    const list = options || items || [];
+    return list.map(item => {
+      if (typeof item === 'string' || typeof item === 'number') {
+        const str = String(item);
+        return { display_name: str, name: str, value: str, code: str };
+      }
+      const disp = item[displayKey] || item.label || item.name || item.code || item.value || '';
+      const val = item[valueKey] !== undefined ? item[valueKey] : (item.value !== undefined ? item.value : disp);
+      return {
+        ...item,
+        display_name: String(disp),
+        value: String(val),
+        code: item.code || ''
+      };
+    });
+  });
+
+  // Filtered options based on user typing
   let filteredItems = $derived.by(() => {
     const q = (value || '').toLowerCase().trim();
-    if (!q) return items.slice(0, 50);
-    return items.filter(item => {
-      const text = (item[displayKey] || item.name || item.code || '').toLowerCase();
+    if (!q) return normalizedList.slice(0, 50);
+    return normalizedList.filter(item => {
+      const text = item.display_name.toLowerCase();
       const code = (item.code || '').toLowerCase();
-      return text.includes(q) || code.includes(q);
+      const val = item.value.toLowerCase();
+      return text.includes(q) || code.includes(q) || val.includes(q);
     }).slice(0, 50);
   });
 
   let exactMatch = $derived.by(() => {
     const trimmed = (value || '').toLowerCase().trim();
-    return items.some(i => (i[displayKey] || i.name || '').toLowerCase() === trimmed);
+    return normalizedList.some(i => i.display_name.toLowerCase() === trimmed || i.value.toLowerCase() === trimmed);
   });
 
   function selectOption(item) {
-    const val = item[valueKey] || item[displayKey] || item.name || '';
+    const val = item.value || item.display_name || '';
     value = val;
     isOpen = false;
     highlightedIndex = -1;
@@ -50,10 +71,16 @@
       const res = await api.registerMaster(category, term);
       const newItem = {
         id: res.id,
-        [displayKey]: res.display_name || res.name || term,
-        [valueKey]: res.display_name || res.name || term,
+        display_name: res.display_name || res.name || term,
+        value: res.display_name || res.name || term,
+        name: res.display_name || res.name || term,
+        code: res.code || term
       };
-      items.push(newItem);
+      if (options) {
+        options.push(newItem);
+      } else {
+        items.push(newItem);
+      }
       selectOption(newItem);
       if (window.showToast) {
         window.showToast(`Registered new ${category}: "${term}"`, 'success');
@@ -91,8 +118,7 @@
     }
   }
 
-  function handleBlur(e) {
-    // Timeout so clicks on dropdown options register before closing
+  function handleBlur() {
     setTimeout(() => {
       isOpen = false;
     }, 200);
@@ -127,28 +153,29 @@
   </div>
 
   {#if isOpen}
-    <div class="combobox-dropdown" bind:this={dropdownEl}>
+    <div class="combobox-dropdown" bind:this={dropdownEl} role="listbox">
       {#if filteredItems.length === 0 && !value.trim()}
         <div class="combobox-empty">No items available</div>
       {:else}
         {#each filteredItems as item, idx}
-          {@const label = item[displayKey] || item.name || item.code || ''}
-          {@const meta = item.code && item.code !== label ? item.code : (item.meta?.hex || '')}
           <div
             class="combobox-item"
             class:highlighted={idx === highlightedIndex}
             onmousedown={() => selectOption(item)}
+            role="option"
+            aria-selected={idx === highlightedIndex}
+            tabindex="-1"
           >
-            <span>{label}</span>
-            {#if meta}
-              <span class="item-meta">{meta}</span>
+            <span>{item.display_name}</span>
+            {#if item.code && item.code !== item.display_name}
+              <span class="item-meta">{item.code}</span>
             {/if}
           </div>
         {/each}
       {/if}
 
       {#if allowCustom && value.trim() && !exactMatch}
-        <div class="combobox-add-new" onmousedown={handleRegisterNew}>
+        <div class="combobox-add-new" onmousedown={handleRegisterNew} role="button" tabindex="0">
           <span>+ Register <strong>"{value.trim()}"</strong> as new {category}</span>
         </div>
       {/if}
@@ -181,6 +208,7 @@
     cursor: pointer;
     padding: 4px;
     font-size: 11px;
+    transition: color 0.15s ease;
   }
 
   .toggle-btn:hover {
@@ -192,13 +220,13 @@
     top: calc(100% + 4px);
     left: 0;
     right: 0;
-    background-color: var(--bg-elevated);
+    background-color: var(--bg-surface);
     border: 1px solid var(--border-strong);
     border-radius: var(--radius-md);
     max-height: 240px;
     overflow-y: auto;
     z-index: 200;
-    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+    box-shadow: var(--shadow-panel);
   }
 
   .combobox-item {
@@ -213,14 +241,18 @@
   }
 
   .combobox-item:hover, .combobox-item.highlighted {
-    background-color: rgba(37, 99, 235, 0.2);
-    color: #fff;
+    background-color: var(--accent-primary);
+    color: #ffffff;
   }
 
   .item-meta {
     font-size: 11px;
     color: var(--text-subtle);
     font-family: var(--font-mono);
+  }
+
+  .combobox-item:hover .item-meta, .combobox-item.highlighted .item-meta {
+    color: rgba(255, 255, 255, 0.85);
   }
 
   .combobox-empty {
