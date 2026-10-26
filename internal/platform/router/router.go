@@ -3,10 +3,13 @@ package router
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
+	"io"
 	"io/fs"
 	"net/http"
 	"os"
 	"path"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -90,6 +93,23 @@ func NewRouter(svc AppServices) http.Handler {
 				"suggestedOrderNo": no,
 				"nextOrderNo":      no,
 			})
+		})
+
+		r.Get("/zoho/fetch", func(w http.ResponseWriter, req *http.Request) {
+			soNo := req.URL.Query().Get("salesOrderNo")
+			if soNo == "" {
+				soNo = req.URL.Query().Get("so")
+			}
+			if soNo == "" {
+				renderError(w, http.StatusBadRequest, "Missing salesOrderNo query parameter")
+				return
+			}
+			data, err := svc.Orders.FetchZohoOrder(soNo)
+			if err != nil {
+				renderError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			renderJSON(w, http.StatusOK, map[string]any{"success": true, "data": data})
 		})
 
 		r.Post("/", func(w http.ResponseWriter, req *http.Request) {
@@ -235,7 +255,57 @@ func NewRouter(svc AppServices) http.Handler {
 		renderJSON(w, http.StatusOK, map[string]any{"success": true, "dispatchedCount": count})
 	})
 
-	// 7. Svelte 5 Frontend SPA Serving (Embedded in binary or disk fallback)
+	// 7. File Upload Endpoint (Images, Artwork, Specs)
+	r.Post("/api/upload", func(w http.ResponseWriter, req *http.Request) {
+		if err := req.ParseMultipartForm(32 << 20); err != nil {
+			renderError(w, http.StatusBadRequest, "File too large or invalid multipart form")
+			return
+		}
+
+		file, handler, err := req.FormFile("file")
+		if err != nil {
+			renderError(w, http.StatusBadRequest, "Missing 'file' field in multipart form")
+			return
+		}
+		defer file.Close()
+
+		uploadDir := "./data/uploads"
+		if err := os.MkdirAll(uploadDir, 0755); err != nil {
+			renderError(w, http.StatusInternalServerError, "Failed to create uploads directory")
+			return
+		}
+
+		cleanBase := strings.ReplaceAll(filepath.Base(handler.Filename), " ", "_")
+		cleanFilename := fmt.Sprintf("%d_%s", time.Now().UnixNano()/1e6, cleanBase)
+		dstPath := filepath.Join(uploadDir, cleanFilename)
+
+		dst, err := os.Create(dstPath)
+		if err != nil {
+			renderError(w, http.StatusInternalServerError, "Failed to create destination file: "+err.Error())
+			return
+		}
+		defer dst.Close()
+
+		if _, err := io.Copy(dst, file); err != nil {
+			renderError(w, http.StatusInternalServerError, "Failed to write file contents: "+err.Error())
+			return
+		}
+
+		fileURL := "/data/uploads/" + cleanFilename
+		renderJSON(w, http.StatusOK, map[string]any{
+			"success":  true,
+			"url":      fileURL,
+			"filename": cleanFilename,
+			"size":     handler.Size,
+		})
+	})
+
+	// Serve Static Uploads
+	_ = os.MkdirAll("./data/uploads", 0755)
+	uploadsFS := http.Dir("./data/uploads")
+	r.Handle("/data/uploads/*", http.StripPrefix("/data/uploads/", http.FileServer(uploadsFS)))
+
+	// 8. Svelte 5 Frontend SPA Serving (Embedded in binary or disk fallback)
 	if svc.WebFS != nil {
 		indexHTML, _ := fs.ReadFile(svc.WebFS, "index.html")
 		fileServer := http.FileServerFS(svc.WebFS)

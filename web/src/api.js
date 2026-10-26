@@ -28,6 +28,29 @@ export const api = {
     return json.nextOrderNo || '';
   },
 
+  async fetchZohoOrder(salesOrderNo) {
+    const res = await fetch(`${API_BASE}/orders/zoho/fetch?salesOrderNo=${encodeURIComponent(salesOrderNo)}`);
+    const json = await res.json();
+    if (!res.ok || json.success === false) {
+      throw new Error(json.error || 'Failed to fetch sales order from Zoho');
+    }
+    return json.data;
+  },
+
+  async uploadFile(file) {
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await fetch(`${API_BASE}/upload`, {
+      method: 'POST',
+      body: formData,
+    });
+    const json = await res.json();
+    if (!res.ok || json.success === false) {
+      throw new Error(json.error || 'File upload failed');
+    }
+    return json;
+  },
+
   async createOrder(payload) {
     const res = await fetch(`${API_BASE}/orders`, {
       method: 'POST',

@@ -49,12 +49,13 @@ func main() {
 	migrationFiles := []string{
 		"migrations/001_initial_graph.sql",
 		"migrations/002_seed_masters.sql",
+		"migrations/003_multi_product_orders.sql",
 	}
 
 	for _, mFile := range migrationFiles {
 		if content, err := os.ReadFile(mFile); err == nil {
 			log.Printf("Applying migration: %s ...", mFile)
-			if err := database.RunMigrations(string(content)); err != nil {
+			if err := database.RunMigrations(mFile, string(content)); err != nil {
 				log.Fatalf("FATAL: Migration failed on %s: %v", mFile, err)
 			}
 		} else {

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -40,8 +41,25 @@ func Connect(dbPath string) (*DB, error) {
 	return &DB{db}, nil
 }
 
-// RunMigrations executes SQL schema scripts in order
-func (d *DB) RunMigrations(migrationSql string) error {
+// RunMigrations executes SQL schema scripts in order with schema_migrations tracking
+func (d *DB) RunMigrations(migrationName string, migrationSql string) error {
+	// Ensure migration tracking table exists
+	_, err := d.DB.Exec(`CREATE TABLE IF NOT EXISTS schema_migrations (
+		version TEXT PRIMARY KEY,
+		applied_at INTEGER NOT NULL
+	)`)
+	if err != nil {
+		return fmt.Errorf("failed to ensure schema_migrations table: %w", err)
+	}
+
+	// Check if already applied
+	var count int
+	err = d.DB.QueryRow("SELECT COUNT(*) FROM schema_migrations WHERE version = ?", migrationName).Scan(&count)
+	if err == nil && count > 0 {
+		log.Printf("Migration %s already applied, skipping", migrationName)
+		return nil
+	}
+
 	queries := strings.Split(migrationSql, ";")
 
 	// 1. Run any PRAGMA statements first outside transaction
@@ -69,11 +87,20 @@ func (d *DB) RunMigrations(migrationSql string) error {
 			continue
 		}
 		if _, err := tx.Exec(q); err != nil {
-			return fmt.Errorf("migration statement failed: %s: %w", q, err)
+			return fmt.Errorf("migration statement failed in %s: %s: %w", migrationName, q, err)
 		}
 	}
 
+	_, err = tx.Exec("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)", migrationName, timeNowMs())
+	if err != nil {
+		return fmt.Errorf("failed to record migration %s: %w", migrationName, err)
+	}
+
 	return tx.Commit()
+}
+
+func timeNowMs() int64 {
+	return time.Now().UnixNano() / int64(time.Millisecond)
 }
 
 // WithTransaction runs a function within an atomic transaction

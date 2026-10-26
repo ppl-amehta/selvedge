@@ -7,26 +7,34 @@ import (
 
 // Standard Node Types
 const (
-	TypeClient     = "CLIENT"
-	TypeVendor     = "VENDOR"
-	TypeOrder      = "ORDER"
-	TypeParentLot  = "PARENT_LOT"
-	TypeBundle     = "BUNDLE"
-	TypeFabric     = "FABRIC"
-	TypeColor      = "COLOR"
-	TypeLocation   = "LOCATION"
-	TypeItemMaster = "ITEM_MASTER"
+	TypeClient              = "CLIENT"
+	TypeVendor              = "VENDOR"
+	TypeOrder               = "ORDER"
+	TypeOrderItem           = "ORDER_ITEM"
+	TypeBranding            = "BRANDING"
+	TypeShippingDestination = "SHIPPING_DESTINATION"
+	TypePersonalization     = "PERSONALIZATION"
+	TypeParentLot           = "PARENT_LOT"
+	TypeBundle              = "BUNDLE"
+	TypeFabric              = "FABRIC"
+	TypeColor               = "COLOR"
+	TypeLocation            = "LOCATION"
+	TypeItemMaster          = "ITEM_MASTER"
 )
 
 // Standard Edge Types
 const (
-	EdgeOrderedBy    = "ORDERED_BY"     // (Order) -> (Client)
-	EdgeSuppliedBy   = "SUPPLIED_BY"    // (ParentLot) -> (Vendor)
-	EdgePartOfLot    = "PART_OF_LOT"    // (Bundle) -> (ParentLot)
-	EdgeStoredAt     = "STORED_AT"      // (Bundle) -> (Location)
-	EdgeAllocatedTo  = "ALLOCATED_TO"   // (Fabric/Trim) -> (Order)
-	EdgeIssuedTo     = "ISSUED_TO"      // (Bundle) -> (Order)
-	EdgeReturnedFrom = "RETURNED_FROM"  // (Remnant/Bit) -> (Order)
+	EdgeOrderedBy          = "ORDERED_BY"          // (Order) -> (Client)
+	EdgeHasItem            = "HAS_ITEM"            // (Order) -> (OrderItem)
+	EdgeHasBranding        = "HAS_BRANDING"        // (OrderItem) -> (Branding)
+	EdgeShipsTo            = "SHIPS_TO"            // (OrderItem) -> (ShippingDestination)
+	EdgeHasPersonalization = "HAS_PERSONALIZATION" // (OrderItem) -> (Personalization)
+	EdgeSuppliedBy         = "SUPPLIED_BY"         // (ParentLot) -> (Vendor)
+	EdgePartOfLot          = "PART_OF_LOT"         // (Bundle) -> (ParentLot)
+	EdgeStoredAt           = "STORED_AT"           // (Bundle) -> (Location)
+	EdgeAllocatedTo        = "ALLOCATED_TO"        // (Fabric/Trim) -> (Order)
+	EdgeIssuedTo           = "ISSUED_TO"           // (Bundle) -> (Order)
+	EdgeReturnedFrom       = "RETURNED_FROM"       // (Remnant/Bit) -> (Order)
 )
 
 // Node represents a vertex in the unified enterprise graph with bi-temporal validity
