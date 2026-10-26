@@ -195,5 +195,97 @@ export const api = {
   async dispatchWorkflows() {
     const res = await fetch(`${API_BASE}/workflows/dispatch`, { method: 'POST' });
     return res.json();
+  },
+
+  // --- Station 2 & 3: Order Preparation & Planning ---
+  async listOrdersForPrep() {
+    const res = await fetch(`${API_BASE}/planning/orders`);
+    const json = await res.json();
+    return json.data || [];
+  },
+
+  async getOrderPrepAndPlan(orderId) {
+    const res = await fetch(`${API_BASE}/planning/orders/${encodeURIComponent(orderId)}`);
+    const json = await res.json();
+    if (!res.ok || json.success === false) {
+      throw new Error(json.error || `Failed to fetch prep details for order ${orderId}`);
+    }
+    return json.data;
+  },
+
+  async savePharma(payload) {
+    const res = await fetch(`${API_BASE}/planning/pharma`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const json = await res.json();
+    if (!res.ok || json.success === false) {
+      throw new Error(json.error || 'Failed to save pharma tech pack');
+    }
+    return json.data;
+  },
+
+  async saveBomLine(payload) {
+    const res = await fetch(`${API_BASE}/planning/bom`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const json = await res.json();
+    if (!res.ok || json.success === false) {
+      throw new Error(json.error || 'Failed to save BOM line');
+    }
+    return json.data;
+  },
+
+  async deleteBomLine(lineId) {
+    const res = await fetch(`${API_BASE}/planning/bom/${encodeURIComponent(lineId)}`, {
+      method: 'DELETE'
+    });
+    const json = await res.json();
+    if (!res.ok || json.success === false) {
+      throw new Error(json.error || 'Failed to delete BOM line');
+    }
+    return json;
+  },
+
+  async raiseProcurementPO(payload) {
+    const res = await fetch(`${API_BASE}/planning/raise-po`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const json = await res.json();
+    if (!res.ok || json.success === false) {
+      throw new Error(json.error || 'Failed to raise procurement requisition');
+    }
+    return json.data;
+  },
+
+  async saveRoutingSteps(orderId, steps) {
+    const res = await fetch(`${API_BASE}/planning/routing-steps`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orderId, steps })
+    });
+    const json = await res.json();
+    if (!res.ok || json.success === false) {
+      throw new Error(json.error || 'Failed to save routing steps');
+    }
+    return json.data;
+  },
+
+  async advanceOrderState(orderId, targetState, reason = '') {
+    const res = await fetch(`${API_BASE}/planning/advance-state`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orderId, targetState, reason })
+    });
+    const json = await res.json();
+    if (!res.ok || json.success === false) {
+      throw new Error(json.error || `Failed to advance order state to ${targetState}`);
+    }
+    return json.data;
   }
 };

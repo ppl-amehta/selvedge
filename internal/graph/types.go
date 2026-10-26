@@ -7,20 +7,24 @@ import (
 
 // Standard Node Types
 const (
-	TypeClient              = "CLIENT"
-	TypeVendor              = "VENDOR"
-	TypeOrder               = "ORDER"
-	TypeOrderItem           = "ORDER_ITEM"
-	TypeBranding            = "BRANDING"
-	TypeShippingDestination = "SHIPPING_DESTINATION"
-	TypePersonalization     = "PERSONALIZATION"
-	TypeParentLot           = "PARENT_LOT"
-	TypeBundle              = "BUNDLE"
-	TypeFabric              = "FABRIC"
-	TypeColor               = "COLOR"
-	TypeLocation            = "LOCATION"
-	TypeItemMaster          = "ITEM_MASTER"
-	TypeQcInspection        = "QC_INSPECTION"
+	TypeClient                 = "CLIENT"
+	TypeVendor                 = "VENDOR"
+	TypeOrder                  = "ORDER"
+	TypeOrderItem              = "ORDER_ITEM"
+	TypeBranding               = "BRANDING"
+	TypeShippingDestination    = "SHIPPING_DESTINATION"
+	TypePersonalization        = "PERSONALIZATION"
+	TypeParentLot              = "PARENT_LOT"
+	TypeBundle                 = "BUNDLE"
+	TypeFabric                 = "FABRIC"
+	TypeColor                  = "COLOR"
+	TypeLocation               = "LOCATION"
+	TypeItemMaster             = "ITEM_MASTER"
+	TypeQcInspection           = "QC_INSPECTION"
+	TypePharmaPattern          = "PHARMA_PATTERN"
+	TypeBomLine                = "BOM_LINE"
+	TypeRoutingStep            = "ROUTING_STEP"
+	TypeProcurementRequisition = "PROCUREMENT_REQUISITION"
 )
 
 // Standard Edge Types
@@ -37,6 +41,11 @@ const (
 	EdgeAllocatedTo        = "ALLOCATED_TO"        // (Fabric/Trim) -> (Order)
 	EdgeIssuedTo           = "ISSUED_TO"           // (Bundle) -> (Order)
 	EdgeReturnedFrom       = "RETURNED_FROM"       // (Remnant/Bit) -> (Order)
+	EdgeHasPharma          = "HAS_PHARMA"          // (OrderItem) -> (PharmaPattern)
+	EdgeRequiresBom        = "REQUIRES_BOM"        // (OrderItem) -> (BomLine)
+	EdgeHasRouting         = "HAS_ROUTING"         // (Order) -> (RoutingStep)
+	EdgeSequencedAfter     = "SEQUENCED_AFTER"     // (RoutingStep) -> (RoutingStep)
+	EdgeHasRequisition     = "HAS_REQUISITION"     // (BomLine) -> (ProcurementRequisition)
 )
 
 // Node represents a vertex in the unified enterprise graph with bi-temporal validity

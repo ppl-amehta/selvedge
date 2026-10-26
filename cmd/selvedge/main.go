@@ -15,6 +15,7 @@ import (
 	"github.com/ppl-amehta/selvedge/internal/erp/inventory"
 	"github.com/ppl-amehta/selvedge/internal/erp/masters"
 	"github.com/ppl-amehta/selvedge/internal/erp/orders"
+	"github.com/ppl-amehta/selvedge/internal/erp/planning"
 	"github.com/ppl-amehta/selvedge/internal/graph"
 	"github.com/ppl-amehta/selvedge/internal/platform/db"
 	"github.com/ppl-amehta/selvedge/internal/platform/router"
@@ -51,6 +52,7 @@ func main() {
 		"migrations/002_seed_masters.sql",
 		"migrations/003_multi_product_orders.sql",
 		"migrations/004_three_stage_inward_pipeline.sql",
+		"migrations/005_order_prep_and_planning.sql",
 	}
 
 	for _, mFile := range migrationFiles {
@@ -76,6 +78,7 @@ func main() {
 	mastersService := masters.NewService(database.DB, graphStore)
 	ordersService := orders.NewService(database.DB, graphStore, workflowEngine)
 	inventoryService := inventory.NewService(database.DB, graphStore, workflowEngine)
+	planningService := planning.NewService(database.DB, graphStore, workflowEngine)
 
 	// 5. Start Background Outbox Poller
 	ctx, cancel := context.WithCancel(context.Background())
@@ -112,6 +115,7 @@ func main() {
 		Masters:   mastersService,
 		Orders:    ordersService,
 		Inventory: inventoryService,
+		Planning:  planningService,
 		WebFS:     svelteFS,
 		WebDir:    absWebDir,
 	})

@@ -20,6 +20,7 @@ import (
 	"github.com/ppl-amehta/selvedge/internal/erp/inventory"
 	"github.com/ppl-amehta/selvedge/internal/erp/masters"
 	"github.com/ppl-amehta/selvedge/internal/erp/orders"
+	"github.com/ppl-amehta/selvedge/internal/erp/planning"
 	"github.com/ppl-amehta/selvedge/internal/graph"
 	"github.com/ppl-amehta/selvedge/internal/workflow"
 )
@@ -30,6 +31,7 @@ type AppServices struct {
 	Masters   *masters.Service
 	Orders    *orders.Service
 	Inventory *inventory.Service
+	Planning  *planning.Service
 	WebFS     fs.FS
 	WebDir    string
 }
@@ -296,7 +298,115 @@ func NewRouter(svc AppServices) http.Handler {
 		})
 	})
 
-	// 5. Unified Graph Query Endpoints
+	// 5. Order Preparation & Planning Endpoints (Station 2 & 3)
+	r.Route("/api/planning", func(r chi.Router) {
+		r.Get("/orders", func(w http.ResponseWriter, req *http.Request) {
+			list, err := svc.Planning.ListOrdersForPrep()
+			if err != nil {
+				renderError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			renderJSON(w, http.StatusOK, map[string]any{"success": true, "data": list})
+		})
+
+		r.Get("/orders/{orderId}", func(w http.ResponseWriter, req *http.Request) {
+			orderID := chi.URLParam(req, "orderId")
+			data, err := svc.Planning.GetOrderPrepAndPlanning(orderID)
+			if err != nil {
+				renderError(w, http.StatusNotFound, err.Error())
+				return
+			}
+			renderJSON(w, http.StatusOK, map[string]any{"success": true, "data": data})
+		})
+
+		r.Post("/pharma", func(w http.ResponseWriter, req *http.Request) {
+			var payload planning.PharmaPayload
+			if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
+				renderError(w, http.StatusBadRequest, "Invalid JSON payload: "+err.Error())
+				return
+			}
+			res, err := svc.Planning.SavePharma(payload.OrderItemID, payload)
+			if err != nil {
+				renderError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			renderJSON(w, http.StatusOK, map[string]any{"success": true, "data": res})
+		})
+
+		r.Post("/bom", func(w http.ResponseWriter, req *http.Request) {
+			var payload planning.BomLinePayload
+			if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
+				renderError(w, http.StatusBadRequest, "Invalid JSON payload: "+err.Error())
+				return
+			}
+			res, err := svc.Planning.SaveBomLine(payload.OrderItemID, payload)
+			if err != nil {
+				renderError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			renderJSON(w, http.StatusOK, map[string]any{"success": true, "data": res})
+		})
+
+		r.Delete("/bom/{lineId}", func(w http.ResponseWriter, req *http.Request) {
+			lineID := chi.URLParam(req, "lineId")
+			if err := svc.Planning.DeleteBomLine(lineID); err != nil {
+				renderError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			renderJSON(w, http.StatusOK, map[string]any{"success": true, "deleted": lineID})
+		})
+
+		r.Post("/raise-po", func(w http.ResponseWriter, req *http.Request) {
+			var payload planning.RaisePOPayload
+			if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
+				renderError(w, http.StatusBadRequest, "Invalid JSON payload: "+err.Error())
+				return
+			}
+			res, err := svc.Planning.RaiseProcurementRequisition(payload.OrderID, payload)
+			if err != nil {
+				renderError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			renderJSON(w, http.StatusOK, map[string]any{"success": true, "data": res})
+		})
+
+		r.Post("/routing-steps", func(w http.ResponseWriter, req *http.Request) {
+			var body struct {
+				OrderID string                    `json:"orderId"`
+				Steps   []planning.RoutingStepPayload `json:"steps"`
+			}
+			if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
+				renderError(w, http.StatusBadRequest, "Invalid JSON payload: "+err.Error())
+				return
+			}
+			res, err := svc.Planning.SaveRoutingSteps(body.OrderID, body.Steps)
+			if err != nil {
+				renderError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			renderJSON(w, http.StatusOK, map[string]any{"success": true, "data": res})
+		})
+
+		r.Post("/advance-state", func(w http.ResponseWriter, req *http.Request) {
+			var body struct {
+				OrderID     string `json:"orderId"`
+				TargetState string `json:"targetState"`
+				Reason      string `json:"reason"`
+			}
+			if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
+				renderError(w, http.StatusBadRequest, "Invalid JSON payload: "+err.Error())
+				return
+			}
+			res, err := svc.Planning.AdvanceOrderState(body.OrderID, body.TargetState, body.Reason)
+			if err != nil {
+				renderError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			renderJSON(w, http.StatusOK, map[string]any{"success": true, "data": res})
+		})
+	})
+
+	// 6. Unified Graph Query Endpoints
 	r.Route("/api/graph", func(r chi.Router) {
 		r.Get("/nodes/{nodeId}", func(w http.ResponseWriter, req *http.Request) {
 			nodeId := chi.URLParam(req, "nodeId")

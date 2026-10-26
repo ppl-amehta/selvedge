@@ -3,9 +3,10 @@
   import { api } from './api.js';
   import OrderTakingView from './views/OrderTakingView.svelte';
   import InwardView from './views/InwardView.svelte';
+  import OrderPrepPlanningView from './views/OrderPrepPlanningView.svelte';
   import GraphInspectorModal from './components/GraphInspectorModal.svelte';
 
-  let activeStation = $state('orders'); // 'orders' | 'inward'
+  let activeStation = $state('orders'); // 'orders' | 'inward' | 'planning'
   let masters = $state({});
   let isGraphOpen = $state(false);
   let isOnline = $state(false);
@@ -94,6 +95,13 @@
     >
       <span>Station 1: Inward & QR Bundles</span>
     </button>
+    <button
+      class="station-btn"
+      class:active={activeStation === 'planning'}
+      onclick={() => activeStation = 'planning'}
+    >
+      <span>Station 2 & 3: Prep & Planning</span>
+    </button>
   </nav>
 
   <div style="display:flex;align-items:center;gap:12px;">
@@ -131,6 +139,8 @@
     <OrderTakingView {masters} />
   {:else if activeStation === 'inward'}
     <InwardView {masters} />
+  {:else if activeStation === 'planning'}
+    <OrderPrepPlanningView {masters} />
   {/if}
 </main>
 
