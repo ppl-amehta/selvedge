@@ -20,6 +20,7 @@ const (
 	TypeColor               = "COLOR"
 	TypeLocation            = "LOCATION"
 	TypeItemMaster          = "ITEM_MASTER"
+	TypeQcInspection        = "QC_INSPECTION"
 )
 
 // Standard Edge Types
@@ -32,6 +33,7 @@ const (
 	EdgeSuppliedBy         = "SUPPLIED_BY"         // (ParentLot) -> (Vendor)
 	EdgePartOfLot          = "PART_OF_LOT"         // (Bundle) -> (ParentLot)
 	EdgeStoredAt           = "STORED_AT"           // (Bundle) -> (Location)
+	EdgeInspectedBy        = "INSPECTED_BY"        // (Bundle) -> (QcInspection)
 	EdgeAllocatedTo        = "ALLOCATED_TO"        // (Fabric/Trim) -> (Order)
 	EdgeIssuedTo           = "ISSUED_TO"           // (Bundle) -> (Order)
 	EdgeReturnedFrom       = "RETURNED_FROM"       // (Remnant/Bit) -> (Order)

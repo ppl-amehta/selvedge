@@ -110,6 +110,39 @@ func (e *Engine) SeedDefaultRules() error {
 			Enabled: true,
 		},
 		{
+			ID:           "rule-floor-count-shortage-hold",
+			Name:         "Floor Count Shortage Debit Note & Payment Freeze",
+			TriggerEvent: "INWARD_FLOOR_COUNTED",
+			Condition: &Condition{
+				Field: "shortfall_qty",
+				Op:    ">",
+				Val:   0.0,
+			},
+			Actions: []Action{
+				{
+					ActionType: "DRAFT_DEBIT_NOTE",
+					Params: map[string]any{
+						"reason": "Physical floor count quantity less than billed invoice",
+						"status": "DRAFT",
+					},
+				},
+				{
+					ActionType: "HOLD_PAYMENT",
+					Params: map[string]any{
+						"reason": "Inward floor count shortage discrepancy flagged",
+					},
+				},
+				{
+					ActionType: "NOTIFY_ROLE",
+					Params: map[string]any{
+						"role":    "merchandiser",
+						"message": "Vendor invoice floor shortage detected; debit note drafted",
+					},
+				},
+			},
+			Enabled: true,
+		},
+		{
 			ID:           "rule-order-bom-init",
 			Name:         "Order Booking Automatic BOM Allocation",
 			TriggerEvent: "ORDER_BOOKED",

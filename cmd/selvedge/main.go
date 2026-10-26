@@ -50,6 +50,7 @@ func main() {
 		"migrations/001_initial_graph.sql",
 		"migrations/002_seed_masters.sql",
 		"migrations/003_multi_product_orders.sql",
+		"migrations/004_three_stage_inward_pipeline.sql",
 	}
 
 	for _, mFile := range migrationFiles {

@@ -175,6 +175,94 @@ func NewRouter(svc AppServices) http.Handler {
 			renderJSON(w, http.StatusOK, res)
 		})
 
+		// --- 3-Stage Inward Pipeline Endpoints ---
+
+		// Station 1A: Gate Entry & Inward Booking
+		r.Post("/gate-inward", func(w http.ResponseWriter, req *http.Request) {
+			var payload inventory.GateInwardPayload
+			if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
+				renderError(w, http.StatusBadRequest, "Invalid JSON payload: "+err.Error())
+				return
+			}
+			res, err := svc.Inventory.GateInward(payload)
+			if err != nil {
+				renderError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			renderJSON(w, http.StatusOK, res)
+		})
+
+		// Station 1B: Floor Count & Discrepancy Reconciliation
+		r.Post("/floor-count", func(w http.ResponseWriter, req *http.Request) {
+			var payload inventory.FloorCountPayload
+			if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
+				renderError(w, http.StatusBadRequest, "Invalid JSON payload: "+err.Error())
+				return
+			}
+			res, err := svc.Inventory.RecordFloorCount(payload)
+			if err != nil {
+				renderError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			renderJSON(w, http.StatusOK, res)
+		})
+
+		// Station 1C: Bundle QC Inspection & Tagging
+		r.Post("/qc-inspect", func(w http.ResponseWriter, req *http.Request) {
+			var payload inventory.BundleQCPayload
+			if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
+				renderError(w, http.StatusBadRequest, "Invalid JSON payload: "+err.Error())
+				return
+			}
+			res, err := svc.Inventory.RecordBundleQC(payload)
+			if err != nil {
+				renderError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			renderJSON(w, http.StatusOK, res)
+		})
+
+		// Discrepancy Resolution
+		r.Post("/resolve-discrepancy", func(w http.ResponseWriter, req *http.Request) {
+			var body struct {
+				ParentCode string `json:"parentCode"`
+				Action     string `json:"action"`
+				Remarks    string `json:"remarks"`
+			}
+			if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
+				renderError(w, http.StatusBadRequest, "Invalid JSON payload: "+err.Error())
+				return
+			}
+			res, err := svc.Inventory.ResolveDiscrepancy(body.ParentCode, body.Action, body.Remarks)
+			if err != nil {
+				renderError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			renderJSON(w, http.StatusOK, res)
+		})
+
+		// Lots Listing with Stage Filter
+		r.Get("/lots", func(w http.ResponseWriter, req *http.Request) {
+			stage := req.URL.Query().Get("stage")
+			lots, err := svc.Inventory.ListLots(stage)
+			if err != nil {
+				renderError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			renderJSON(w, http.StatusOK, map[string]any{"success": true, "data": lots})
+		})
+
+		// Lot Detail & Bundle Breakdown
+		r.Get("/lots/{parentCode}", func(w http.ResponseWriter, req *http.Request) {
+			parentCode := chi.URLParam(req, "parentCode")
+			detail, err := svc.Inventory.GetLot(parentCode)
+			if err != nil {
+				renderError(w, http.StatusNotFound, err.Error())
+				return
+			}
+			renderJSON(w, http.StatusOK, map[string]any{"success": true, "data": detail})
+		})
+
 		r.Post("/return-remnant", func(w http.ResponseWriter, req *http.Request) {
 			var body struct {
 				BundleCode       string  `json:"bundleCode"`

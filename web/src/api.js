@@ -94,6 +94,74 @@ export const api = {
     return json;
   },
 
+  async gateInward(payload) {
+    const res = await fetch(`${API_BASE}/inventory/gate-inward`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const json = await res.json();
+    if (!res.ok || json.success === false) {
+      throw new Error(json.error || 'Failed to submit gate inward');
+    }
+    return json;
+  },
+
+  async recordFloorCount(payload) {
+    const res = await fetch(`${API_BASE}/inventory/floor-count`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const json = await res.json();
+    if (!res.ok || json.success === false) {
+      throw new Error(json.error || 'Failed to record floor count');
+    }
+    return json;
+  },
+
+  async recordBundleQC(payload) {
+    const res = await fetch(`${API_BASE}/inventory/qc-inspect`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const json = await res.json();
+    if (!res.ok || json.success === false) {
+      throw new Error(json.error || 'Failed to submit bundle QC inspection');
+    }
+    return json;
+  },
+
+  async resolveDiscrepancy(parentCode, action, remarks = '') {
+    const res = await fetch(`${API_BASE}/inventory/resolve-discrepancy`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ parentCode, action, remarks }),
+    });
+    const json = await res.json();
+    if (!res.ok || json.success === false) {
+      throw new Error(json.error || 'Failed to resolve discrepancy');
+    }
+    return json;
+  },
+
+  async listLots(stage = '') {
+    const url = stage ? `${API_BASE}/inventory/lots?stage=${encodeURIComponent(stage)}` : `${API_BASE}/inventory/lots`;
+    const res = await fetch(url);
+    const json = await res.json();
+    return json.data || [];
+  },
+
+  async getLot(parentCode) {
+    const res = await fetch(`${API_BASE}/inventory/lots/${encodeURIComponent(parentCode)}`);
+    const json = await res.json();
+    if (!res.ok || json.success === false) {
+      throw new Error(json.error || `Failed to fetch lot ${parentCode}`);
+    }
+    return json.data;
+  },
+
   async returnRemnant(payload) {
     const res = await fetch(`${API_BASE}/inventory/return-remnant`, {
       method: 'POST',
