@@ -1,0 +1,43 @@
+name: Selvedge CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    name: Build & Test Engine
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Go 1.27
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.27'
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: 'web/package-lock.json'
+
+      - name: Build Svelte 5 Frontend
+        run: |
+          cd web
+          npm ci
+          npm run build
+          cd ..
+
+      - name: Run Go Unit & Integration Tests
+        run: |
+          go test -v -race ./...
+
+      - name: Compile Native Binary
+        run: |
+          go build -v -o selvedge ./cmd/selvedge

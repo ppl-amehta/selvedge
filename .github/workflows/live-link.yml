@@ -1,0 +1,125 @@
+name: Public Live Link (Cloud Runner)
+
+on:
+  workflow_dispatch:
+    inputs:
+      duration_hours:
+        description: 'Duration to keep public live link active (hours, max 6)'
+        required: true
+        default: '2'
+
+permissions:
+  contents: write
+  actions: write
+  metadata: read
+
+jobs:
+  live-tunnel:
+    name: Start Public Live Link
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Go 1.27
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.27'
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: 'web/package-lock.json'
+
+      - name: Build Svelte 5 Assets
+        run: |
+          cd web
+          npm ci
+          npm run build
+          cd ..
+
+      - name: Compile Native Go Binary
+        run: |
+          go build -o selvedge ./cmd/selvedge
+
+      - name: Install Cloudflare Tunnel Client
+        run: |
+          curl -sL --output cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+          sudo dpkg -i cloudflared.deb
+          rm -f cloudflared.deb
+
+      - name: Start App & Cloudflare Public Tunnel
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Launching Selvedge Enterprise server on port 4000..."
+          ./selvedge --port 4000 > app.log 2>&1 &
+          APP_PID=$!
+          echo "APP_PID=$APP_PID" >> $GITHUB_ENV
+
+          # Wait for local health check
+          for i in {1..20}; do
+            if curl -s http://localhost:4000/api/health | grep -q "ok"; then
+              echo "✓ Local Selvedge server is healthy!"
+              break
+            fi
+            sleep 1
+          done
+
+          echo "Starting Cloudflare edge tunnel..."
+          cloudflared tunnel --url http://localhost:4000 > tunnel.log 2>&1 &
+          TUNNEL_PID=$!
+          echo "TUNNEL_PID=$TUNNEL_PID" >> $GITHUB_ENV
+
+          # Wait for public trycloudflare.com URL
+          echo "Resolving public HTTPS endpoint..."
+          LIVE_URL=""
+          for i in {1..30}; do
+            LIVE_URL=$(grep -o 'https://[-0-9a-z]*\.trycloudflare\.com' tunnel.log | head -n 1 || true)
+            if [ -n "$LIVE_URL" ]; then
+              echo "✓ Public live link established: $LIVE_URL"
+              break
+            fi
+            sleep 1
+          done
+
+          if [ -z "$LIVE_URL" ]; then
+            echo "Failed to acquire Cloudflare Tunnel URL. Logs:"
+            cat tunnel.log
+            exit 1
+          fi
+
+          echo "LIVE_URL=$LIVE_URL" >> $GITHUB_ENV
+
+          # Update GitHub Repository Homepage URL
+          gh repo edit ${{ github.repository }} --homepage "$LIVE_URL" || true
+
+          # Write to GitHub Step Summary
+          echo "## 🌐 Public Live Link Active" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "| :--- | :--- |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Live URL** | [$LIVE_URL]($LIVE_URL) |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Engine** | Go 1.27 + SQLite WAL + Svelte 5 |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Runner** | GitHub Actions (${{ runner.os }} ${{ runner.arch }}) |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Duration** | ${{ github.event.inputs.duration_hours }} hour(s) |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "> 💡 **Tip:** The live link has also been pinned to the GitHub repository homepage!" >> $GITHUB_STEP_SUMMARY
+
+          # Keep alive
+          DURATION_HOURS=${{ github.event.inputs.duration_hours }}
+          DURATION_SECS=$((DURATION_HOURS * 3600))
+          echo "Tunnel running in cloud for $DURATION_HOURS hour(s) ($DURATION_SECS seconds)..."
+          sleep $DURATION_SECS
+
+      - name: Teardown & Reset Homepage
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Cleaning up live public link..."
+          gh repo edit ${{ github.repository }} --homepage "" || true

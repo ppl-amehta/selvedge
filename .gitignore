@@ -11,6 +11,8 @@ data/*.db-wal
 # OS & Logs
 .DS_Store
 *.log
+.live/
+data/uploads/
 
 # Dependencies
 node_modules/
