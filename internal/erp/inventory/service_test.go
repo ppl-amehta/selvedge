@@ -21,10 +21,11 @@ func setupTestDB(t *testing.T) (*sql.DB, *inventory.Service) {
 	t.Cleanup(func() { os.RemoveAll(tmpDir) })
 
 	dbPath := filepath.Join(tmpDir, "test.db")
-	db, err := sql.Open("sqlite3", dbPath+"?_journal_mode=WAL&_foreign_keys=ON")
+	db, err := sql.Open("sqlite3", dbPath+"?_journal_mode=WAL&_busy_timeout=5000&_foreign_keys=ON&_synchronous=NORMAL&_txlock=immediate")
 	if err != nil {
 		t.Fatalf("failed to open sqlite: %v", err)
 	}
+	db.SetMaxOpenConns(1)
 	t.Cleanup(func() { db.Close() })
 
 	// Load schema migrations
@@ -32,6 +33,7 @@ func setupTestDB(t *testing.T) (*sql.DB, *inventory.Service) {
 		"../../../migrations/001_initial_graph.sql",
 		"../../../migrations/002_seed_masters.sql",
 		"../../../migrations/004_three_stage_inward_pipeline.sql",
+		"../../../migrations/007_invoices_and_multi_fabric_lots.sql",
 	}
 
 	for _, sf := range schemaFiles {
@@ -252,5 +254,152 @@ func TestThreeStageInwardPipeline_Zips(t *testing.T) {
 	}
 	if floorRes.Stage != inventory.StageAwaitingQC {
 		t.Errorf("Expected stage AWAITING_QC, got %s", floorRes.Stage)
+	}
+}
+
+func TestMultiProductFabric_And_InvoiceSplitting(t *testing.T) {
+	_, svc := setupTestDB(t)
+
+	// 1. Inward multi-product fabric consignment under single parent code 261028-A and invoice INV-SPLIT-999
+	res1, err := svc.GateInward(inventory.GateInwardPayload{
+		ParentCode:    "261028-A",
+		InwardDate:    "2026-10-28",
+		InwardType:    "Fabric",
+		VendorName:    "Apex Textiles Ltd",
+		InvoiceNo:     "INV-SPLIT-999",
+		InvoiceQty:    150.0,
+		InvoiceAmount: 52500.0,
+		UOM:           "Kgs",
+		FabricProducts: []inventory.FabricProductItem{
+			{
+				ID:            "fp_body",
+				FabricType:    "Single Jersey",
+				FpccProduct:   "Single Jersey 180 GSM",
+				VendorProduct: "Super Combed SJ",
+				Color:         "Navy Blue",
+				UOM:           "Kgs",
+				Dia:           "60\"",
+				GSM:           180,
+				Rate:          350.0,
+				RollCount:     2,
+			},
+			{
+				ID:            "fp_rib",
+				FabricType:    "Rib 1x1 / 2x2",
+				FpccProduct:   "1x1 Collar Rib 220 GSM",
+				VendorProduct: "Collar Rib",
+				Color:         "Navy Blue",
+				UOM:           "Kgs",
+				Dia:           "34\"",
+				GSM:           220,
+				Rate:          380.0,
+				RollCount:     1,
+			},
+		},
+		QRCopies: 3,
+	})
+	if err != nil {
+		t.Fatalf("GateInward multi-fabric failed: %v", err)
+	}
+	if len(res1.Bundles) != 3 {
+		t.Fatalf("Expected 3 bundles across multi-fabric products, got %d", len(res1.Bundles))
+	}
+	if res1.Bundles[0].BundleCode != "261028-A-1/3" || res1.Bundles[2].BundleCode != "261028-A-3/3" {
+		t.Errorf("Unexpected bundle codes: %+v", res1.Bundles)
+	}
+
+	// 2. Inward another lot (Zips) tagged to the SAME invoice INV-SPLIT-999
+	res2, err := svc.GateInward(inventory.GateInwardPayload{
+		ParentCode:    "261028-B",
+		InwardDate:    "2026-10-28",
+		InwardType:    "Zips",
+		VendorName:    "Apex Textiles Ltd",
+		InvoiceNo:     "INV-SPLIT-999",
+		InvoiceQty:    200.0,
+		InvoiceAmount: 10000.0,
+		UOM:           "Pcs",
+		VendorProduct: "YKK Metal #5",
+		FpccProduct:   "Metal Zip 65cm",
+		NoOfBundles:   2,
+	})
+	if err != nil {
+		t.Fatalf("GateInward second lot under same invoice failed: %v", err)
+	}
+	if res2.ParentCode != "261028-B" {
+		t.Errorf("Expected 261028-B, got %s", res2.ParentCode)
+	}
+
+	// 3. Search Invoices by invoiceNo prefix
+	invoices, err := svc.SearchInvoices("SPLIT")
+	if err != nil {
+		t.Fatalf("SearchInvoices failed: %v", err)
+	}
+	if len(invoices) != 1 {
+		t.Fatalf("Expected 1 invoice, got %d", len(invoices))
+	}
+	inv := invoices[0]
+	if inv.InvoiceNo != "INV-SPLIT-999" {
+		t.Errorf("Expected invoice INV-SPLIT-999, got %s", inv.InvoiceNo)
+	}
+	if len(inv.TaggedLots) != 2 {
+		t.Errorf("Expected 2 tagged lots under invoice, got %d (%v)", len(inv.TaggedLots), inv.TaggedLots)
+	}
+
+	// 4. Test non-fabric rejection if >1 product provided
+	_, err = svc.GateInward(inventory.GateInwardPayload{
+		ParentCode:    "261028-C",
+		InwardDate:    "2026-10-28",
+		InwardType:    "Zips",
+		VendorName:    "Apex Textiles Ltd",
+		InvoiceNo:     "INV-SPLIT-999",
+		InvoiceQty:    10.0,
+		UOM:           "Pcs",
+		FabricProducts: []inventory.FabricProductItem{
+			{FabricType: "Zip A", RollCount: 1},
+			{FabricType: "Zip B", RollCount: 1},
+		},
+	})
+	if err == nil {
+		t.Errorf("Expected error for non-fabric multi-product inward, got nil")
+	}
+
+	// 5. Test QC Inspection with audio URL & speech transcript
+	qcRes, err := svc.RecordBundleQC(inventory.BundleQCPayload{
+		ParentCode: "261028-A",
+		Inspector:  "QC Specialist Ramesh",
+		Inspections: []inventory.BundleQCItem{
+			{
+				BundleCode: "261028-A-1/3",
+				Result:     "PASS",
+				Remarks:    "Clean knit, no fly contamination",
+				AudioURL:   "/uploads/qc-audio-1.webm",
+				Transcript: "Roll checked under lightbox, zero defects found",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("RecordBundleQC with audio failed: %v", err)
+	}
+	if qcRes.PassCount != 1 {
+		t.Errorf("Expected 1 pass, got %d", qcRes.PassCount)
+	}
+
+	// Verify GetLot returns audio and transcript
+	lotDetail, err := svc.GetLot("261028-A")
+	if err != nil {
+		t.Fatalf("GetLot failed: %v", err)
+	}
+	if len(lotDetail.Bundles) != 3 {
+		t.Fatalf("Expected 3 bundles, got %d", len(lotDetail.Bundles))
+	}
+	b1 := lotDetail.Bundles[0]
+	if b1.QcAudioUrl != "/uploads/qc-audio-1.webm" {
+		t.Errorf("Expected QcAudioUrl to be /uploads/qc-audio-1.webm, got '%s'", b1.QcAudioUrl)
+	}
+	if b1.QcTranscript != "Roll checked under lightbox, zero defects found" {
+		t.Errorf("Expected transcript match, got '%s'", b1.QcTranscript)
+	}
+	if lotDetail.Lot.QRCopiesPerBundle != 3 {
+		t.Errorf("Expected QRCopiesPerBundle 3, got %d", lotDetail.Lot.QRCopiesPerBundle)
 	}
 }

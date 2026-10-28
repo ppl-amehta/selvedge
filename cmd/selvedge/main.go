@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ppl-amehta/selvedge/internal/erp/cutting"
 	"github.com/ppl-amehta/selvedge/internal/erp/inventory"
 	"github.com/ppl-amehta/selvedge/internal/erp/masters"
 	"github.com/ppl-amehta/selvedge/internal/erp/orders"
@@ -53,6 +54,8 @@ func main() {
 		"migrations/003_multi_product_orders.sql",
 		"migrations/004_three_stage_inward_pipeline.sql",
 		"migrations/005_order_prep_and_planning.sql",
+		"migrations/006_floor_cutting_station.sql",
+		"migrations/007_invoices_and_multi_fabric_lots.sql",
 	}
 
 	for _, mFile := range migrationFiles {
@@ -79,6 +82,7 @@ func main() {
 	ordersService := orders.NewService(database.DB, graphStore, workflowEngine)
 	inventoryService := inventory.NewService(database.DB, graphStore, workflowEngine)
 	planningService := planning.NewService(database.DB, graphStore, workflowEngine)
+	cuttingService := cutting.NewService(database.DB, graphStore, workflowEngine)
 
 	// 5. Start Background Outbox Poller
 	ctx, cancel := context.WithCancel(context.Background())
@@ -116,6 +120,7 @@ func main() {
 		Orders:    ordersService,
 		Inventory: inventoryService,
 		Planning:  planningService,
+		Cutting:   cuttingService,
 		WebFS:     svelteFS,
 		WebDir:    absWebDir,
 	})

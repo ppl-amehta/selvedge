@@ -11,9 +11,26 @@
     tagList = []
   } = $props();
 
+  let copiesPerBundle = $state(3);
+
   let activeList = $derived.by(() => {
-    if (tagList && tagList.length > 0) return tagList;
-    return [{ bundleCode, item, color, qty, uom, location, qcStatus }];
+    const base = (tagList && tagList.length > 0) 
+      ? tagList 
+      : [{ bundleCode, item, color, qty, uom, location, qcStatus }];
+
+    const multiplier = Math.max(1, copiesPerBundle || 1);
+    const multiplied = [];
+    for (let c = 1; c <= multiplier; c++) {
+      for (const tag of base) {
+        multiplied.push({
+          ...tag,
+          copyIndex: c,
+          totalCopies: multiplier,
+          tagKey: `${tag.bundleCode || 'tag'}_copy_${c}`
+        });
+      }
+    }
+    return multiplied;
   });
 
   function printTag() {
@@ -92,15 +109,35 @@
   <div class="modal-overlay">
     <div class="modal-box" style="max-width: {activeList.length > 1 ? '780px' : '420px'}; max-height: 90vh; overflow-y: auto;">
       <div class="modal-header">
-        <h3>Factory Thermal QR Tags ({activeList.length} Labels)</h3>
+        <div>
+          <h3>Factory Thermal QR Tags ({activeList.length} Labels)</h3>
+          <span style="font-size:12px;color:var(--text-muted);">
+            Configured for <strong>{copiesPerBundle} copies per bundle</strong> (Outer Roll, Core Tube, Ledger Swatch)
+          </span>
+        </div>
         <button class="btn btn-secondary btn-sm" onclick={() => isOpen = false}>&times;</button>
       </div>
       <div class="modal-body" style="padding: 20px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;background:var(--bg-tertiary);padding:10px 14px;border-radius:var(--radius-sm);">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="font-weight:600;font-size:13px;">Copies per Bundle:</span>
+            <button type="button" class="btn btn-secondary btn-sm" onclick={() => { if (copiesPerBundle > 1) copiesPerBundle--; }}>−</button>
+            <span style="font-size:14px;font-weight:800;padding:0 6px;">{copiesPerBundle}</span>
+            <button type="button" class="btn btn-secondary btn-sm" onclick={() => { if (copiesPerBundle < 10) copiesPerBundle++; }}>+</button>
+          </div>
+          <span style="font-size:12px;color:var(--text-secondary);">
+            {tagList.length || 1} unique bundles &times; {copiesPerBundle} = <strong>{activeList.length} physical tags</strong>
+          </span>
+        </div>
+
         <div class="tags-grid">
-          {#each activeList as tag}
+          {#each activeList as tag (tag.tagKey || tag.bundleCode + '_' + tag.copyIndex)}
             {@const rects = generateRects(tag.bundleCode)}
             <div class="qr-tag-card">
-              <div class="qr-tag-header">FPCC APPAREL SYSTEM OF RECORD</div>
+              <div class="qr-tag-header">
+                FPCC APPAREL SYSTEM
+                <span class="copy-tag-pill">TAG {tag.copyIndex}/{tag.totalCopies}</span>
+              </div>
               <svg class="qr-svg" viewBox="0 0 125 125" xmlns="http://www.w3.org/2000/svg">
                 <rect width="100%" height="100%" fill="#fff" />
                 {#each rects as r}
@@ -120,7 +157,7 @@
       </div>
       <div class="modal-footer" style="justify-content: space-between;">
         <button class="btn btn-secondary" onclick={() => isOpen = false}>Close</button>
-        <button class="btn btn-primary" onclick={printTag}>🖨️ Print Zebra Thermal Tags ({activeList.length})</button>
+        <button class="btn btn-primary" onclick={printTag}>🖨️ Print Zebra Thermal Tags ({activeList.length} Total)</button>
       </div>
     </div>
   </div>
@@ -157,6 +194,18 @@
     text-align: center;
     padding-bottom: 4px;
     margin-bottom: 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .copy-tag-pill {
+    background: #000;
+    color: #fff;
+    font-size: 8px;
+    font-weight: 800;
+    padding: 1px 4px;
+    border-radius: 2px;
   }
 
   .qr-svg {

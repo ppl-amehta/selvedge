@@ -25,6 +25,10 @@ const (
 	TypeBomLine                = "BOM_LINE"
 	TypeRoutingStep            = "ROUTING_STEP"
 	TypeProcurementRequisition = "PROCUREMENT_REQUISITION"
+	TypeCuttingJob             = "CUTTING_JOB"
+	TypeCutLay                 = "CUT_LAY"
+	TypeCutBundle              = "CUT_BUNDLE"
+	TypeRemnantReturn          = "REMNANT_RETURN"
 )
 
 // Standard Edge Types
@@ -46,6 +50,9 @@ const (
 	EdgeHasRouting         = "HAS_ROUTING"         // (Order) -> (RoutingStep)
 	EdgeSequencedAfter     = "SEQUENCED_AFTER"     // (RoutingStep) -> (RoutingStep)
 	EdgeHasRequisition     = "HAS_REQUISITION"     // (BomLine) -> (ProcurementRequisition)
+	EdgeCutFrom            = "CUT_FROM"            // (CutLay) -> (Roll / Bundle)
+	EdgeYieldsBundle       = "YIELDS_BUNDLE"       // (CutLay) -> (CutBundle)
+	EdgeYieldsRemnant      = "YIELDS_REMNANT"      // (CutLay) -> (RemnantReturn)
 )
 
 // Node represents a vertex in the unified enterprise graph with bi-temporal validity

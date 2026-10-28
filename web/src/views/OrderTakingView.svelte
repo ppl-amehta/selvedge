@@ -110,12 +110,96 @@
   }
 
   function addProductItem() {
-    items = [...items, {
-      ...createInitialProductItem(),
-      id: 'it_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
-      totalQty: 50,
-      matrix: { Men: { M: 50 } }
-    }];
+    // If there is an existing product item, copy its properties (fabric, color, labels, packaging, brandings, unitPrice, remarks)
+    // while strictly resetting quantities to 0!
+    if (items.length > 0) {
+      const prev = items[items.length - 1];
+      const clonedBrandings = (prev.brandings || []).map(b => ({
+        ...b,
+        id: 'bnd_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+        brandingFileUrl: b.brandingFileUrl || ''
+      }));
+
+      items = [...items, {
+        id: 'it_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+        category: prev.category || 'Apparel',
+        subCategory: prev.subCategory || 'Polo Shirt',
+        productName: prev.productName || '',
+        colorName: prev.colorName || '',
+        fabricName: prev.fabricName || '',
+        unitPrice: prev.unitPrice || 0,
+        totalQty: 0, // NEVER COPY QUANTITIES: strictly 0
+        clientEtd: prev.clientEtd || new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
+        clientRemarks: prev.clientRemarks || '',
+        productImageUrl: prev.productImageUrl || '',
+        mainLabel: prev.mainLabel || '',
+        otherLabel: prev.otherLabel || '',
+        custPackaging: prev.custPackaging || '',
+        matrix: prev.category === 'Apparel' ? { Men: {}, Women: {} } : { General: {} },
+        brandings: clonedBrandings,
+        personalizations: [],
+        isLocked: false,
+        isCollapsed: false
+      }];
+      if (window.showToast) {
+        window.showToast(`Added product copying specs from Item #${items.length - 1} (Quantities reset to 0)`, 'info');
+      }
+    } else {
+      items = [createInitialProductItem()];
+    }
+  }
+
+  function copyPropertiesFromItem(destIdx, srcIdx) {
+    if (srcIdx < 0 || srcIdx >= items.length || srcIdx === destIdx) return;
+    const src = items[srcIdx];
+    const dest = items[destIdx];
+
+    const clonedBrandings = (src.brandings || []).map(b => ({
+      ...b,
+      id: 'bnd_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+      brandingFileUrl: b.brandingFileUrl || ''
+    }));
+
+    items[destIdx] = {
+      ...dest,
+      category: src.category,
+      subCategory: src.subCategory,
+      productName: src.productName,
+      colorName: src.colorName,
+      fabricName: src.fabricName,
+      unitPrice: src.unitPrice,
+      mainLabel: src.mainLabel,
+      otherLabel: src.otherLabel,
+      custPackaging: src.custPackaging,
+      clientRemarks: src.clientRemarks,
+      brandings: clonedBrandings,
+      // Keep existing destination quantities or reset to 0 if not entered
+      totalQty: dest.totalQty || 0
+    };
+
+    if (window.showToast) {
+      window.showToast(`Copied specs from Item #${srcIdx + 1} to Item #${destIdx + 1} (Quantities preserved)`, 'success');
+    }
+  }
+
+  function onSubCategoryChange(idx, newSubCategory) {
+    items[idx].subCategory = newSubCategory;
+    // Check if any previous item matches this subCategory
+    const matchingPrev = items.find((it, i) => i !== idx && it.subCategory === newSubCategory);
+    if (matchingPrev) {
+      // Auto-copy properties from matching item
+      if (!items[idx].fabricName && matchingPrev.fabricName) items[idx].fabricName = matchingPrev.fabricName;
+      if (!items[idx].unitPrice && matchingPrev.unitPrice) items[idx].unitPrice = matchingPrev.unitPrice;
+      if (!items[idx].mainLabel && matchingPrev.mainLabel) items[idx].mainLabel = matchingPrev.mainLabel;
+      if (!items[idx].otherLabel && matchingPrev.otherLabel) items[idx].otherLabel = matchingPrev.otherLabel;
+      if (!items[idx].custPackaging && matchingPrev.custPackaging) items[idx].custPackaging = matchingPrev.custPackaging;
+      if (items[idx].brandings.length === 0 && matchingPrev.brandings.length > 0) {
+        items[idx].brandings = matchingPrev.brandings.map(b => ({
+          ...b,
+          id: 'bnd_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6)
+        }));
+      }
+    }
   }
 
   function removeProductItem(idx) {
@@ -206,6 +290,10 @@
       items = ord.items.map(it => ({
         ...it,
         id: 'it_cloned_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+        // STRICT REQUIREMENT: DO NOT COPY QUANTITIES
+        totalQty: 0,
+        matrix: it.category === 'Apparel' ? { Men: {}, Women: {} } : { General: {} },
+        personalizations: (it.personalizations || []).map(p => ({ ...p, qty: 0 })),
         isLocked: false,
         isCollapsed: false
       }));
@@ -640,6 +728,32 @@
             <!-- Product Card Body (Collapsible) -->
             {#if !item.isCollapsed}
               <div class="product-card-body">
+                {#if items.length > 1}
+                  <div class="quick-copy-specs-banner" style="margin-bottom:14px;background:var(--bg-tertiary);padding:8px 12px;border-radius:var(--radius-sm);display:flex;align-items:center;gap:10px;font-size:12px;">
+                    <span style="font-weight:600;color:var(--text-muted);">📋 Quick Spec Sync:</span>
+                    <select
+                      class="select-control"
+                      style="width:auto;font-size:12px;padding:4px 10px;height:auto;"
+                      onchange={(e) => {
+                        if (e.target.value !== '') {
+                          copyPropertiesFromItem(idx, parseInt(e.target.value, 10));
+                          e.target.value = '';
+                        }
+                      }}
+                    >
+                      <option value="">Copy properties from another item in this order...</option>
+                      {#each items as other, oIdx}
+                        {#if oIdx !== idx}
+                          <option value={oIdx}>
+                            Item #{oIdx + 1}: {other.productName || other.subCategory} ({other.colorName || 'No Color'})
+                          </option>
+                        {/if}
+                      {/each}
+                    </select>
+                    <span style="color:var(--text-subtle);font-size:11px;">(Quantities will not be overwritten)</span>
+                  </div>
+                {/if}
+
                 <!-- Basic Product Attributes Grid -->
                 <div class="product-fields-grid">
                   <!-- Category -->
@@ -652,9 +766,9 @@
                       onchange={() => {
                         // Switch default subcategory on category toggle
                         if (item.category === 'Non-Apparel') {
-                          item.subCategory = 'Drinkware / Sippers';
+                          onSubCategoryChange(idx, 'Drinkware / Sippers');
                         } else {
-                          item.subCategory = 'Polo Shirt';
+                          onSubCategoryChange(idx, 'Polo Shirt');
                         }
                       }}
                     >
@@ -674,6 +788,7 @@
                       valueKey="display_name"
                       bind:value={item.subCategory}
                       placeholder="Select or add sub-category..."
+                      onSelect={(val) => onSubCategoryChange(idx, val?.display_name || val)}
                     />
                   </div>
 

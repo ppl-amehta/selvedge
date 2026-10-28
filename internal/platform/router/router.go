@@ -17,6 +17,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
+	"github.com/ppl-amehta/selvedge/internal/erp/cutting"
 	"github.com/ppl-amehta/selvedge/internal/erp/inventory"
 	"github.com/ppl-amehta/selvedge/internal/erp/masters"
 	"github.com/ppl-amehta/selvedge/internal/erp/orders"
@@ -32,6 +33,7 @@ type AppServices struct {
 	Orders    *orders.Service
 	Inventory *inventory.Service
 	Planning  *planning.Service
+	Cutting   *cutting.Service
 	WebFS     fs.FS
 	WebDir    string
 }
@@ -165,6 +167,31 @@ func NewRouter(svc AppServices) http.Handler {
 
 		r.Get("/next-parent-code", suggestParentCodeHandler)
 		r.Get("/suggest-parent-code", suggestParentCodeHandler)
+
+		// Search & Retrieve Inward Invoices
+		r.Get("/invoices", func(w http.ResponseWriter, req *http.Request) {
+			q := req.URL.Query().Get("q")
+			list, err := svc.Inventory.SearchInvoices(q)
+			if err != nil {
+				renderError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			renderJSON(w, http.StatusOK, map[string]any{"success": true, "data": list})
+		})
+
+		r.Get("/invoices/{invoiceNo}", func(w http.ResponseWriter, req *http.Request) {
+			invNo := chi.URLParam(req, "invoiceNo")
+			inv, err := svc.Inventory.GetInvoice(invNo)
+			if err != nil {
+				renderError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			if inv == nil {
+				renderError(w, http.StatusNotFound, "Invoice not found")
+				return
+			}
+			renderJSON(w, http.StatusOK, map[string]any{"success": true, "data": inv})
+		})
 
 		r.Post("/inward", func(w http.ResponseWriter, req *http.Request) {
 			var payload inventory.InwardParentLotPayload
@@ -406,7 +433,85 @@ func NewRouter(svc AppServices) http.Handler {
 		})
 	})
 
-	// 6. Unified Graph Query Endpoints
+	// 6. Floor Cutting Station Endpoints (Station 4)
+	r.Route("/api/cutting", func(r chi.Router) {
+		r.Get("/orders", func(w http.ResponseWriter, req *http.Request) {
+			list, err := svc.Cutting.ListCuttingOrders()
+			if err != nil {
+				renderError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			renderJSON(w, http.StatusOK, map[string]any{"success": true, "data": list})
+		})
+
+		r.Get("/job/{idOrOrderNo}", func(w http.ResponseWriter, req *http.Request) {
+			idOrOrderNo := chi.URLParam(req, "idOrOrderNo")
+			detail, err := svc.Cutting.GetCuttingJob(idOrOrderNo)
+			if err != nil {
+				renderError(w, http.StatusNotFound, err.Error())
+				return
+			}
+			renderJSON(w, http.StatusOK, map[string]any{"success": true, "data": detail})
+		})
+
+		r.Post("/issue-roll", func(w http.ResponseWriter, req *http.Request) {
+			var body struct {
+				CuttingJobID string `json:"cuttingJobId"`
+				RollCode     string `json:"rollCode"`
+				OperatorName string `json:"operatorName"`
+			}
+			if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
+				renderError(w, http.StatusBadRequest, "Invalid JSON payload: "+err.Error())
+				return
+			}
+			res, err := svc.Cutting.IssueRollToJob(body.CuttingJobID, body.RollCode, body.OperatorName)
+			if err != nil {
+				renderError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			renderJSON(w, http.StatusOK, res)
+		})
+
+		r.Post("/record-lay", func(w http.ResponseWriter, req *http.Request) {
+			var payload cutting.RecordLayPayload
+			if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
+				renderError(w, http.StatusBadRequest, "Invalid JSON payload: "+err.Error())
+				return
+			}
+			res, err := svc.Cutting.RecordCutLay(payload)
+			if err != nil {
+				renderError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			renderJSON(w, http.StatusOK, map[string]any{"success": true, "data": res})
+		})
+
+		r.Post("/record-remnant", func(w http.ResponseWriter, req *http.Request) {
+			var payload cutting.RecordRemnantPayload
+			if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
+				renderError(w, http.StatusBadRequest, "Invalid JSON payload: "+err.Error())
+				return
+			}
+			res, err := svc.Cutting.RecordRemnant(payload)
+			if err != nil {
+				renderError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			renderJSON(w, http.StatusOK, map[string]any{"success": true, "data": res})
+		})
+
+		r.Post("/bundle-slip/{bundleId}", func(w http.ResponseWriter, req *http.Request) {
+			bundleID := chi.URLParam(req, "bundleId")
+			slip, err := svc.Cutting.PrintBundleSlip(bundleID)
+			if err != nil {
+				renderError(w, http.StatusNotFound, err.Error())
+				return
+			}
+			renderJSON(w, http.StatusOK, map[string]any{"success": true, "data": slip})
+		})
+	})
+
+	// 7. Unified Graph Query Endpoints
 	r.Route("/api/graph", func(r chi.Router) {
 		r.Get("/nodes/{nodeId}", func(w http.ResponseWriter, req *http.Request) {
 			nodeId := chi.URLParam(req, "nodeId")

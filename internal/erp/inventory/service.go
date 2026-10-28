@@ -44,6 +44,35 @@ func NewService(db *sql.DB, graphStore *graph.Store, wf *workflow.Engine) *Servi
 // 3-STAGE INWARD PIPELINE STRUCTS
 // -------------------------------------------------------------
 
+type FabricProductItem struct {
+	ID            string  `json:"id"`
+	FabricType    string  `json:"fabricType"`
+	FpccProduct   string  `json:"fpccProduct"`
+	VendorProduct string  `json:"vendorProduct"`
+	Color         string  `json:"color"`
+	UOM           string  `json:"uom"`
+	Dia           string  `json:"dia,omitempty"`
+	GSM           float64 `json:"gsm,omitempty"`
+	Composition   string  `json:"composition,omitempty"`
+	Rate          float64 `json:"rate,omitempty"`
+	RollCount     int     `json:"rollCount"`
+}
+
+type InwardInvoice struct {
+	ID            string   `json:"id"`
+	InvoiceNo     string   `json:"invoiceNo"`
+	VendorName    string   `json:"vendorName"`
+	InvoiceDate   string   `json:"invoiceDate"`
+	InvoiceQty    float64  `json:"invoiceQty"`
+	InvoiceAmount float64  `json:"invoiceAmount"`
+	UOM           string   `json:"uom"`
+	Currency      string   `json:"currency"`
+	Remarks       string   `json:"remarks"`
+	CreatedAt     int64    `json:"createdAt"`
+	TaggedLots    []string `json:"taggedLots,omitempty"`
+	TotalLotsQty  float64  `json:"totalLotsQty,omitempty"`
+}
+
 type GateBundleStub struct {
 	Sequence int     `json:"sequence"`
 	SizeSpec string  `json:"sizeSpec,omitempty"`
@@ -51,22 +80,24 @@ type GateBundleStub struct {
 }
 
 type GateInwardPayload struct {
-	ParentCode    string           `json:"parentCode"`
-	InwardDate    string           `json:"inwardDate"`
-	InwardType    string           `json:"inwardType"` // Fabric, Zips, Packaging, Trims, Finished Goods, Labels
-	VendorName    string           `json:"vendorName"`
-	InvoiceNo     string           `json:"invoiceNo"`
-	InvoiceQty    float64          `json:"invoiceQty"`
-	InvoiceAmount float64          `json:"invoiceAmount"`
-	UOM           string           `json:"uom"`
-	VendorProduct string           `json:"vendorProduct"`
-	FpccProduct   string           `json:"fpccProduct"`
-	VendorColor   string           `json:"vendorColor"`
-	FpccColor     string           `json:"fpccColor"`
-	NoOfBundles   int              `json:"noOfBundles"`
-	Comment       string           `json:"comment"`
-	Attrs         map[string]any   `json:"attrs"`   // Conditional specs
-	Bundles       []GateBundleStub `json:"bundles"` // Optional bundle-level size & rate
+	ParentCode     string              `json:"parentCode"`
+	InwardDate     string              `json:"inwardDate"`
+	InwardType     string              `json:"inwardType"` // Fabric, Zips, Packaging, Trims, Finished Goods, Labels
+	VendorName     string              `json:"vendorName"`
+	InvoiceNo      string              `json:"invoiceNo"`
+	InvoiceQty     float64             `json:"invoiceQty"`
+	InvoiceAmount  float64             `json:"invoiceAmount"`
+	UOM            string              `json:"uom"`
+	VendorProduct  string              `json:"vendorProduct"`
+	FpccProduct    string              `json:"fpccProduct"`
+	VendorColor    string              `json:"vendorColor"`
+	FpccColor      string              `json:"fpccColor"`
+	NoOfBundles    int                 `json:"noOfBundles"`
+	Comment        string              `json:"comment"`
+	Attrs          map[string]any      `json:"attrs"`   // Conditional specs
+	Bundles        []GateBundleStub    `json:"bundles"` // Optional bundle-level size & rate
+	FabricProducts []FabricProductItem `json:"fabricProducts,omitempty"` // Multiple fabric products per lot
+	QRCopies       int                 `json:"qrCopies,omitempty"`       // Default 3
 }
 
 type BundleStubInfo struct {
@@ -127,6 +158,8 @@ type BundleQCItem struct {
 	Result      string `json:"result"` // 'PASS' or 'FAIL'
 	Remarks     string `json:"remarks"`
 	ImageURL    string `json:"imageUrl"`
+	AudioURL    string `json:"audioUrl,omitempty"`
+	Transcript  string `json:"transcript,omitempty"`
 	InspectedBy string `json:"inspectedBy"`
 }
 
@@ -148,30 +181,33 @@ type BundleQCResult struct {
 }
 
 type LotSummary struct {
-	ID               string         `json:"id"`
-	ParentCode       string         `json:"parentCode"`
-	InwardDate       string         `json:"inwardDate"`
-	InwardType       string         `json:"inwardType"`
-	VendorName       string         `json:"vendorName"`
-	InvoiceNo        string         `json:"invoiceNo"`
-	InvoiceQty       float64        `json:"invoiceQty"`
-	InvoiceAmount    float64        `json:"invoiceAmount"`
-	CountedQty       float64        `json:"countedQty"`
-	VarianceQty      float64        `json:"varianceQty"`
-	VariancePct      float64        `json:"variancePct"`
-	UOM              string         `json:"uom"`
-	VendorProduct    string         `json:"vendorProduct"`
-	FpccProduct      string         `json:"fpccProduct"`
-	VendorColor      string         `json:"vendorColor"`
-	FpccColor        string         `json:"fpccColor"`
-	Stage            string         `json:"stage"`
-	NoOfBundles      int            `json:"noOfBundles"`
-	InspectedBundles int            `json:"inspectedBundles"`
-	PassedBundles    int            `json:"passedBundles"`
-	RejectedBundles  int            `json:"rejectedBundles"`
-	Remarks          string         `json:"remarks"`
-	Attrs            map[string]any `json:"attrs"`
-	CreatedAt        int64          `json:"createdAt"`
+	ID                string              `json:"id"`
+	ParentCode        string              `json:"parentCode"`
+	InwardDate        string              `json:"inwardDate"`
+	InwardType        string              `json:"inwardType"`
+	VendorName        string              `json:"vendorName"`
+	InvoiceID         string              `json:"invoiceId,omitempty"`
+	InvoiceNo         string              `json:"invoiceNo"`
+	InvoiceQty        float64             `json:"invoiceQty"`
+	InvoiceAmount     float64             `json:"invoiceAmount"`
+	CountedQty        float64             `json:"countedQty"`
+	VarianceQty       float64             `json:"varianceQty"`
+	VariancePct       float64             `json:"variancePct"`
+	UOM               string              `json:"uom"`
+	VendorProduct     string              `json:"vendorProduct"`
+	FpccProduct       string              `json:"fpccProduct"`
+	VendorColor       string              `json:"vendorColor"`
+	FpccColor         string              `json:"fpccColor"`
+	Stage             string              `json:"stage"`
+	NoOfBundles       int                 `json:"noOfBundles"`
+	InspectedBundles  int                 `json:"inspectedBundles"`
+	PassedBundles     int                 `json:"passedBundles"`
+	RejectedBundles   int                 `json:"rejectedBundles"`
+	Remarks           string              `json:"remarks"`
+	Attrs             map[string]any      `json:"attrs"`
+	FabricProducts    []FabricProductItem `json:"fabricProducts,omitempty"`
+	QRCopiesPerBundle int                 `json:"qrCopiesPerBundle,omitempty"`
+	CreatedAt         int64               `json:"createdAt"`
 }
 
 type BundleDetail struct {
@@ -192,6 +228,8 @@ type BundleDetail struct {
 	QcStatus       string  `json:"qcStatus"`
 	QcRemarks      string  `json:"qcRemarks"`
 	QcImageUrl     string  `json:"qcImageUrl"`
+	QcAudioUrl     string  `json:"qcAudioUrl"`
+	QcTranscript   string  `json:"qcTranscript"`
 	QcInspectedAt  int64   `json:"qcInspectedAt"`
 	BundleComment  string  `json:"bundleComment"`
 	QRPayload      string  `json:"qrPayload"`
@@ -362,10 +400,71 @@ func (s *Service) GateInward(p GateInwardPayload) (GateInwardResult, error) {
 		}
 	}
 	var dia float64
+	diaStr := ""
 	if diaVal, ok := p.Attrs["dia"]; ok {
-		if diaF, ok := diaVal.(float64); ok {
-			dia = diaF
+		switch v := diaVal.(type) {
+		case float64:
+			dia = v
+			diaStr = fmt.Sprintf("%.0f\"", v)
+		case string:
+			diaStr = v
+			fmt.Sscanf(strings.ReplaceAll(v, `"`, ""), "%f", &dia)
 		}
+	}
+
+	qrCopies := p.QRCopies
+	if qrCopies < 1 {
+		qrCopies = 3
+	} else if qrCopies > 10 {
+		qrCopies = 10
+	}
+	if numBundles > 200 {
+		numBundles = 200
+	}
+
+	// Fabric Multi-Product or Single Product Handling
+	var fabricProductsJSON []byte
+	var fabricProducts []FabricProductItem
+	if inwardType == "Fabric" {
+		if len(p.FabricProducts) > 0 {
+			fabricProducts = p.FabricProducts
+			totalRolls := 0
+			for _, fp := range fabricProducts {
+				rCount := fp.RollCount
+				if rCount <= 0 {
+					rCount = 1
+				}
+				totalRolls += rCount
+			}
+			if totalRolls > 0 {
+				numBundles = totalRolls
+			}
+		} else {
+			fabricProducts = []FabricProductItem{
+				{
+					ID:            "fp_1",
+					FabricType:    fabricType,
+					FpccProduct:   fpccFabName,
+					VendorProduct: vendorFabName,
+					Color:         p.FpccColor,
+					UOM:           uom,
+					Dia:           diaStr,
+					GSM:           invoiceGsm,
+					Rate:          unitRate,
+					RollCount:     numBundles,
+				},
+			}
+		}
+		var err error
+		fabricProductsJSON, err = json.Marshal(fabricProducts)
+		if err != nil {
+			return GateInwardResult{}, fmt.Errorf("failed to serialize fabric products: %w", err)
+		}
+	} else {
+		if len(p.FabricProducts) > 1 {
+			return GateInwardResult{}, fmt.Errorf("non-fabric inward types strictly support one product type")
+		}
+		fabricProductsJSON = []byte("[]")
 	}
 
 	now := graph.NowMs()
@@ -392,6 +491,20 @@ func (s *Service) GateInward(p GateInwardPayload) (GateInwardResult, error) {
 		}
 	}
 
+	// 1b. Resolve or Auto-Register Top-Level Inward Invoice
+	var invoiceID string
+	err = tx.QueryRow("SELECT id FROM inward_invoices WHERE vendor_name = ? AND invoice_no = ?", vendorName, invoiceNo).Scan(&invoiceID)
+	if err == sql.ErrNoRows {
+		invoiceID = fmt.Sprintf("inv_%s", randomSuffix())
+		_, err = tx.Exec(`
+			INSERT INTO inward_invoices (id, invoice_no, vendor_name, invoice_date, invoice_qty, invoice_amount, uom, currency, remarks, created_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, 'INR', ?, ?)
+		`, invoiceID, invoiceNo, vendorName, inwardDate, p.InvoiceQty, p.InvoiceAmount, uom, p.Comment, now)
+		if err != nil {
+			return GateInwardResult{}, fmt.Errorf("failed to register inward invoice: %w", err)
+		}
+	}
+
 	// 2. Insert Parent Lot with stage 'AWAITING_COUNT'
 	_, err = tx.Exec(`
 		INSERT INTO parent_inward_lots (
@@ -399,19 +512,22 @@ func (s *Service) GateInward(p GateInwardPayload) (GateInwardResult, error) {
 			uom, invoice_qty, invoice_amount, physical_received_qty, shortfall_qty, discrepancy_amount,
 			fabric_type, vendor_fab_name, fpcc_fab_name, vendor_color, fpcc_color,
 			invoice_gsm, dia, remarks, stage, unit_rate, counted_qty, variance_qty, variance_pct,
-			vendor_product, fpcc_product, no_of_bundles, attrs_json, created_at
+			vendor_product, fpcc_product, no_of_bundles, attrs_json, created_at,
+			invoice_id, fabric_products_json, qr_copies_per_bundle
 		) VALUES (
 			?, ?, ?, ?, ?, ?, ?,
 			?, ?, ?, 0.0, 0.0, 0.0,
 			?, ?, ?, ?, ?,
 			?, ?, ?, ?, ?, 0.0, 0.0, 0.0,
-			?, ?, ?, ?, ?
+			?, ?, ?, ?, ?,
+			?, ?, ?
 		)
 	`, parentLotID, parentCode, inwardDate, vendorID, vendorName, invoiceNo, inwardType,
 		uom, p.InvoiceQty, p.InvoiceAmount,
 		fabricType, vendorFabName, fpccFabName, p.VendorColor, p.FpccColor,
 		invoiceGsm, dia, p.Comment, string(StageAwaitingCount), unitRate,
 		p.VendorProduct, p.FpccProduct, numBundles, string(attrsJSON), now,
+		invoiceID, string(fabricProductsJSON), qrCopies,
 	)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE") {
@@ -460,6 +576,15 @@ func (s *Service) GateInward(p GateInwardPayload) (GateInwardResult, error) {
 		return GateInwardResult{}, fmt.Errorf("failed to insert graph edge SUPPLIED_BY: %w", err)
 	}
 
+	// 4b. Insert Graph Node for INVOICE & Edge: (INVOICE) -[:CONTAINS_LOT]-> (PARENT_LOT)
+	_, _ = s.graph.EnsureNode(tx, "INVOICE", map[string]any{
+		"invoice_no": invoiceNo,
+		"vendor":     vendorName,
+	}, invoiceID)
+	_, _ = s.graph.InsertEdge(tx, invoiceID, parentLotID, "CONTAINS_LOT", map[string]any{
+		"inward_type": inwardType,
+	})
+
 	// Map bundle stubs by explicit Sequence
 	stubSpecs := make(map[int]GateBundleStub)
 	for _, stub := range p.Bundles {
@@ -470,78 +595,179 @@ func (s *Service) GateInward(p GateInwardPayload) (GateInwardResult, error) {
 
 	// 5. Generate Bundle Stubs (ParentCode-1/N .. N/N) with Pending status
 	var createdStubs []BundleStubInfo
-	for i := 1; i <= numBundles; i++ {
-		bundleCode := fmt.Sprintf("%s-%d/%d", parentCode, i, numBundles)
-		bundleID := fmt.Sprintf("bnd_%s_%d", parentCode, i)
+	bundleIndex := 0
 
-		sizeSpec := ""
-		rate := unitRate
-		if stub, ok := stubSpecs[i]; ok {
-			if stub.SizeSpec != "" {
-				sizeSpec = stub.SizeSpec
+	if inwardType == "Fabric" && len(fabricProducts) > 0 {
+		for _, fp := range fabricProducts {
+			rolls := fp.RollCount
+			if rolls <= 0 {
+				rolls = 1
 			}
-			if stub.Rate > 0 {
-				rate = stub.Rate
+			prodItemName := fp.FpccProduct
+			if prodItemName == "" {
+				prodItemName = fp.VendorProduct
 			}
-		} else if i <= len(p.Bundles) {
-			if p.Bundles[i-1].SizeSpec != "" {
-				sizeSpec = p.Bundles[i-1].SizeSpec
+			if prodItemName == "" {
+				prodItemName = fp.FabricType
 			}
-			if p.Bundles[i-1].Rate > 0 {
-				rate = p.Bundles[i-1].Rate
+			prodColor := fp.Color
+			if prodColor == "" {
+				prodColor = colorName
+			}
+			prodRate := fp.Rate
+			if prodRate <= 0 {
+				prodRate = unitRate
+			}
+			prodGsm := fp.GSM
+			if prodGsm <= 0 {
+				prodGsm = invoiceGsm
+			}
+
+			for r := 0; r < rolls; r++ {
+				bundleIndex++
+				bundleCode := fmt.Sprintf("%s-%d/%d", parentCode, bundleIndex, numBundles)
+				bundleID := fmt.Sprintf("bnd_%s_%d", parentCode, bundleIndex)
+
+				sizeSpec := fp.FabricType
+				if fp.Dia != "" {
+					sizeSpec += fmt.Sprintf(" (Dia: %s)", fp.Dia)
+				}
+				rate := prodRate
+				if stub, ok := stubSpecs[bundleIndex]; ok {
+					if stub.SizeSpec != "" {
+						sizeSpec = stub.SizeSpec
+					}
+					if stub.Rate > 0 {
+						rate = stub.Rate
+					}
+				}
+
+				qrPayloadJSON, _ := json.Marshal(map[string]any{
+					"bundleCode":  bundleCode,
+					"parentCode":  parentCode,
+					"item":        prodItemName,
+					"color":       prodColor,
+					"sizeSpec":    sizeSpec,
+					"location":    "A/R01/S01",
+					"qcStatus":    "Pending",
+					"generatedAt": time.Now().Format(time.RFC3339),
+				})
+
+				_, err = tx.Exec(`
+					INSERT INTO bundles (
+						id, bundle_code, parent_lot_id, parent_code, bundle_sequence, total_bundles,
+						item_type, item_name, color_name, inward_weight_qty, measured_gsm,
+						location_bin, qc_status, qc_remarks, qr_payload, available_qty,
+						size_spec, rate, created_at
+					) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0.0, ?, 'A/R01/S01', 'Pending', '', ?, 0.0, ?, ?, ?)
+				`, bundleID, bundleCode, parentLotID, parentCode, bundleIndex, numBundles,
+					inwardType, prodItemName, prodColor, prodGsm,
+					string(qrPayloadJSON), sizeSpec, rate, now,
+				)
+				if err != nil {
+					return GateInwardResult{}, fmt.Errorf("failed to insert fabric bundle stub %s: %w", bundleCode, err)
+				}
+
+				// Graph Node: BUNDLE
+				bundleProps := map[string]any{
+					"bundle_code": bundleCode,
+					"sequence":    bundleIndex,
+					"total":       numBundles,
+					"qc_status":   "Pending",
+					"item_name":   prodItemName,
+				}
+				if _, err := s.graph.InsertNode(tx, graph.TypeBundle, bundleProps, bundleID); err != nil {
+					return GateInwardResult{}, fmt.Errorf("failed to insert bundle graph node: %w", err)
+				}
+
+				if _, err := s.graph.InsertEdge(tx, bundleID, parentLotID, graph.EdgePartOfLot, map[string]any{"sequence": bundleIndex}); err != nil {
+					return GateInwardResult{}, fmt.Errorf("failed to insert edge PART_OF_LOT: %w", err)
+				}
+
+				createdStubs = append(createdStubs, BundleStubInfo{
+					BundleCode: bundleCode,
+					Sequence:   bundleIndex,
+					Total:      numBundles,
+					SizeSpec:   sizeSpec,
+					Rate:       rate,
+					Status:     "Pending",
+				})
 			}
 		}
+	} else {
+		for i := 1; i <= numBundles; i++ {
+			bundleCode := fmt.Sprintf("%s-%d/%d", parentCode, i, numBundles)
+			bundleID := fmt.Sprintf("bnd_%s_%d", parentCode, i)
 
-		qrPayloadJSON, _ := json.Marshal(map[string]any{
-			"bundleCode":  bundleCode,
-			"parentCode":  parentCode,
-			"item":        itemName,
-			"color":       colorName,
-			"sizeSpec":    sizeSpec,
-			"location":    "A/R01/S01",
-			"qcStatus":    "Pending",
-			"generatedAt": time.Now().Format(time.RFC3339),
-		})
+			sizeSpec := ""
+			rate := unitRate
+			if stub, ok := stubSpecs[i]; ok {
+				if stub.SizeSpec != "" {
+					sizeSpec = stub.SizeSpec
+				}
+				if stub.Rate > 0 {
+					rate = stub.Rate
+				}
+			} else if i <= len(p.Bundles) {
+				if p.Bundles[i-1].SizeSpec != "" {
+					sizeSpec = p.Bundles[i-1].SizeSpec
+				}
+				if p.Bundles[i-1].Rate > 0 {
+					rate = p.Bundles[i-1].Rate
+				}
+			}
 
-		_, err = tx.Exec(`
-			INSERT INTO bundles (
-				id, bundle_code, parent_lot_id, parent_code, bundle_sequence, total_bundles,
-				item_type, item_name, color_name, inward_weight_qty, measured_gsm,
-				location_bin, qc_status, qc_remarks, qr_payload, available_qty,
-				size_spec, rate, created_at
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0.0, ?, 'A/R01/S01', 'Pending', '', ?, 0.0, ?, ?, ?)
-		`, bundleID, bundleCode, parentLotID, parentCode, i, numBundles,
-			inwardType, itemName, colorName, invoiceGsm,
-			string(qrPayloadJSON), sizeSpec, rate, now,
-		)
-		if err != nil {
-			return GateInwardResult{}, fmt.Errorf("failed to insert bundle stub %s: %w", bundleCode, err)
+			qrPayloadJSON, _ := json.Marshal(map[string]any{
+				"bundleCode":  bundleCode,
+				"parentCode":  parentCode,
+				"item":        itemName,
+				"color":       colorName,
+				"sizeSpec":    sizeSpec,
+				"location":    "A/R01/S01",
+				"qcStatus":    "Pending",
+				"generatedAt": time.Now().Format(time.RFC3339),
+			})
+
+			_, err = tx.Exec(`
+				INSERT INTO bundles (
+					id, bundle_code, parent_lot_id, parent_code, bundle_sequence, total_bundles,
+					item_type, item_name, color_name, inward_weight_qty, measured_gsm,
+					location_bin, qc_status, qc_remarks, qr_payload, available_qty,
+					size_spec, rate, created_at
+				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0.0, ?, 'A/R01/S01', 'Pending', '', ?, 0.0, ?, ?, ?)
+			`, bundleID, bundleCode, parentLotID, parentCode, i, numBundles,
+				inwardType, itemName, colorName, invoiceGsm,
+				string(qrPayloadJSON), sizeSpec, rate, now,
+			)
+			if err != nil {
+				return GateInwardResult{}, fmt.Errorf("failed to insert bundle stub %s: %w", bundleCode, err)
+			}
+
+			// Graph Node: BUNDLE
+			bundleProps := map[string]any{
+				"bundle_code": bundleCode,
+				"sequence":    i,
+				"total":       numBundles,
+				"qc_status":   "Pending",
+			}
+			if _, err := s.graph.InsertNode(tx, graph.TypeBundle, bundleProps, bundleID); err != nil {
+				return GateInwardResult{}, fmt.Errorf("failed to insert bundle graph node: %w", err)
+			}
+
+			// Graph Edge: (BUNDLE) -[:PART_OF_LOT]-> (PARENT_LOT)
+			if _, err := s.graph.InsertEdge(tx, bundleID, parentLotID, graph.EdgePartOfLot, map[string]any{"sequence": i}); err != nil {
+				return GateInwardResult{}, fmt.Errorf("failed to insert edge PART_OF_LOT: %w", err)
+			}
+
+			createdStubs = append(createdStubs, BundleStubInfo{
+				BundleCode: bundleCode,
+				Sequence:   i,
+				Total:      numBundles,
+				SizeSpec:   sizeSpec,
+				Rate:       rate,
+				Status:     "Pending",
+			})
 		}
-
-		// Graph Node: BUNDLE
-		bundleProps := map[string]any{
-			"bundle_code": bundleCode,
-			"sequence":    i,
-			"total":       numBundles,
-			"qc_status":   "Pending",
-		}
-		if _, err := s.graph.InsertNode(tx, graph.TypeBundle, bundleProps, bundleID); err != nil {
-			return GateInwardResult{}, fmt.Errorf("failed to insert bundle graph node: %w", err)
-		}
-
-		// Graph Edge: (BUNDLE) -[:PART_OF_LOT]-> (PARENT_LOT)
-		if _, err := s.graph.InsertEdge(tx, bundleID, parentLotID, graph.EdgePartOfLot, map[string]any{"sequence": i}); err != nil {
-			return GateInwardResult{}, fmt.Errorf("failed to insert edge PART_OF_LOT: %w", err)
-		}
-
-		createdStubs = append(createdStubs, BundleStubInfo{
-			BundleCode: bundleCode,
-			Sequence:   i,
-			Total:      numBundles,
-			SizeSpec:   sizeSpec,
-			Rate:       rate,
-			Status:     "Pending",
-		})
 	}
 
 	// 6. Workflow Event: INWARD_LOT_BOOKED
@@ -883,9 +1109,9 @@ func (s *Service) RecordBundleQC(p BundleQCPayload) (BundleQCResult, error) {
 		qcInspID := fmt.Sprintf("qc_%s_%s", cleanBundleCode, randomSuffix())
 		_, err = tx.Exec(`
 			INSERT INTO bundle_qc_inspections (
-				id, bundle_id, parent_code, bundle_code, result, remarks, image_url, inspected_by, inspected_at
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-		`, qcInspID, bundleID, parentCode, cleanBundleCode, qcResultRecord, item.Remarks, item.ImageURL, inspector, now)
+				id, bundle_id, parent_code, bundle_code, result, remarks, image_url, audio_url, transcript, inspected_by, inspected_at
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`, qcInspID, bundleID, parentCode, cleanBundleCode, qcResultRecord, item.Remarks, item.ImageURL, item.AudioURL, item.Transcript, inspector, now)
 		if err != nil {
 			return BundleQCResult{}, fmt.Errorf("failed to record inspection for %s: %w", cleanBundleCode, err)
 		}
@@ -906,9 +1132,9 @@ func (s *Service) RecordBundleQC(p BundleQCPayload) (BundleQCResult, error) {
 		// 3. Update Bundle Status & QC Metadata
 		_, err = tx.Exec(`
 			UPDATE bundles
-			SET qc_status = ?, qc_remarks = ?, qc_image_url = ?, qc_inspected_at = ?, qr_payload = ?
+			SET qc_status = ?, qc_remarks = ?, qc_image_url = ?, qc_audio_url = ?, qc_transcript = ?, qc_inspected_at = ?, qr_payload = ?
 			WHERE id = ?
-		`, resStatus, item.Remarks, item.ImageURL, now, string(qrPayloadJSON), bundleID)
+		`, resStatus, item.Remarks, item.ImageURL, item.AudioURL, item.Transcript, now, string(qrPayloadJSON), bundleID)
 		if err != nil {
 			return BundleQCResult{}, fmt.Errorf("failed to update bundle %s: %w", cleanBundleCode, err)
 		}
@@ -1077,6 +1303,85 @@ func (s *Service) ResolveDiscrepancy(parentCode, action, remarks string) (map[st
 }
 
 // -------------------------------------------------------------
+// INWARD INVOICES & DETAIL QUERIES
+// -------------------------------------------------------------
+
+func (s *Service) SearchInvoices(query string) ([]InwardInvoice, error) {
+	clean := strings.TrimSpace(query)
+	sqlQuery := `
+		SELECT i.id, i.invoice_no, i.vendor_name, i.invoice_date, i.invoice_qty, i.invoice_amount,
+		       COALESCE(i.uom, 'Kgs'), COALESCE(i.currency, 'INR'), COALESCE(i.remarks, ''), i.created_at,
+		       COALESCE((SELECT GROUP_CONCAT(p.parent_code) FROM parent_inward_lots p WHERE p.invoice_no = i.invoice_no), ''),
+		       COALESCE((SELECT SUM(p.invoice_qty) FROM parent_inward_lots p WHERE p.invoice_no = i.invoice_no), 0)
+		FROM inward_invoices i
+	`
+	var rows *sql.Rows
+	var err error
+	if clean != "" {
+		sqlQuery += ` WHERE i.invoice_no LIKE ? OR i.vendor_name LIKE ? ORDER BY i.created_at DESC LIMIT 30`
+		rows, err = s.db.Query(sqlQuery, "%"+clean+"%", "%"+clean+"%")
+	} else {
+		sqlQuery += ` ORDER BY i.created_at DESC LIMIT 30`
+		rows, err = s.db.Query(sqlQuery)
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []InwardInvoice
+	for rows.Next() {
+		var inv InwardInvoice
+		var rawLots string
+		if err := rows.Scan(
+			&inv.ID, &inv.InvoiceNo, &inv.VendorName, &inv.InvoiceDate, &inv.InvoiceQty, &inv.InvoiceAmount,
+			&inv.UOM, &inv.Currency, &inv.Remarks, &inv.CreatedAt, &rawLots, &inv.TotalLotsQty,
+		); err != nil {
+			return nil, err
+		}
+		if rawLots != "" {
+			inv.TaggedLots = strings.Split(rawLots, ",")
+		} else {
+			inv.TaggedLots = []string{}
+		}
+		list = append(list, inv)
+	}
+	if list == nil {
+		list = []InwardInvoice{}
+	}
+	return list, nil
+}
+
+func (s *Service) GetInvoice(invoiceNo string) (*InwardInvoice, error) {
+	clean := strings.TrimSpace(invoiceNo)
+	var inv InwardInvoice
+	var rawLots string
+	err := s.db.QueryRow(`
+		SELECT i.id, i.invoice_no, i.vendor_name, i.invoice_date, i.invoice_qty, i.invoice_amount,
+		       COALESCE(i.uom, 'Kgs'), COALESCE(i.currency, 'INR'), COALESCE(i.remarks, ''), i.created_at,
+		       COALESCE((SELECT GROUP_CONCAT(p.parent_code) FROM parent_inward_lots p WHERE p.invoice_no = i.invoice_no), ''),
+		       COALESCE((SELECT SUM(p.invoice_qty) FROM parent_inward_lots p WHERE p.invoice_no = i.invoice_no), 0)
+		FROM inward_invoices i
+		WHERE i.invoice_no = ?
+		LIMIT 1
+	`, clean).Scan(
+		&inv.ID, &inv.InvoiceNo, &inv.VendorName, &inv.InvoiceDate, &inv.InvoiceQty, &inv.InvoiceAmount,
+		&inv.UOM, &inv.Currency, &inv.Remarks, &inv.CreatedAt, &rawLots, &inv.TotalLotsQty,
+	)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	} else if err != nil {
+		return nil, err
+	}
+	if rawLots != "" {
+		inv.TaggedLots = strings.Split(rawLots, ",")
+	} else {
+		inv.TaggedLots = []string{}
+	}
+	return &inv, nil
+}
+
+// -------------------------------------------------------------
 // LISTING & DETAIL QUERIES
 // -------------------------------------------------------------
 
@@ -1092,7 +1397,9 @@ func (s *Service) ListLots(stageFilter string) ([]LotSummary, error) {
 			(SELECT COUNT(*) FROM bundles b WHERE b.parent_code = p.parent_code AND b.qc_status != 'Pending') AS inspected_count,
 			(SELECT COUNT(*) FROM bundles b WHERE b.parent_code = p.parent_code AND b.qc_status = 'Passed') AS passed_count,
 			(SELECT COUNT(*) FROM bundles b WHERE b.parent_code = p.parent_code AND b.qc_status = 'Rejected') AS rejected_count,
-			COALESCE(p.remarks, ''), COALESCE(p.attrs_json, '{}'), p.created_at
+			COALESCE(p.remarks, ''), COALESCE(p.attrs_json, '{}'),
+			COALESCE(p.invoice_id, ''), COALESCE(p.fabric_products_json, '[]'), COALESCE(p.qr_copies_per_bundle, 3),
+			p.created_at
 		FROM parent_inward_lots p
 	`
 	var args []any
@@ -1112,7 +1419,7 @@ func (s *Service) ListLots(stageFilter string) ([]LotSummary, error) {
 	var results []LotSummary
 	for rows.Next() {
 		var item LotSummary
-		var rawAttrs string
+		var rawAttrs, rawFabProds string
 		err := rows.Scan(
 			&item.ID, &item.ParentCode, &item.InwardDate, &item.InwardType, &item.VendorName, &item.InvoiceNo,
 			&item.InvoiceQty, &item.InvoiceAmount, &item.CountedQty, &item.VarianceQty, &item.VariancePct,
@@ -1120,7 +1427,9 @@ func (s *Service) ListLots(stageFilter string) ([]LotSummary, error) {
 			&item.VendorColor, &item.FpccColor,
 			&item.Stage, &item.NoOfBundles,
 			&item.InspectedBundles, &item.PassedBundles, &item.RejectedBundles,
-			&item.Remarks, &rawAttrs, &item.CreatedAt,
+			&item.Remarks, &rawAttrs,
+			&item.InvoiceID, &rawFabProds, &item.QRCopiesPerBundle,
+			&item.CreatedAt,
 		)
 		if err != nil {
 			return nil, err
@@ -1128,6 +1437,10 @@ func (s *Service) ListLots(stageFilter string) ([]LotSummary, error) {
 		item.Attrs = make(map[string]any)
 		if rawAttrs != "" {
 			_ = json.Unmarshal([]byte(rawAttrs), &item.Attrs)
+		}
+		item.FabricProducts = []FabricProductItem{}
+		if rawFabProds != "" {
+			_ = json.Unmarshal([]byte(rawFabProds), &item.FabricProducts)
 		}
 		results = append(results, item)
 	}
@@ -1146,7 +1459,7 @@ func (s *Service) GetLot(parentCode string) (LotDetail, error) {
 
 	// 1. Fetch Lot Summary
 	var item LotSummary
-	var rawAttrs string
+	var rawAttrs, rawFabProds string
 	err := s.db.QueryRow(`
 		SELECT 
 			p.id, p.parent_code, p.inward_date, p.inward_type, p.vendor_name, p.invoice_no,
@@ -1158,7 +1471,9 @@ func (s *Service) GetLot(parentCode string) (LotDetail, error) {
 			(SELECT COUNT(*) FROM bundles b WHERE b.parent_code = p.parent_code AND b.qc_status != 'Pending'),
 			(SELECT COUNT(*) FROM bundles b WHERE b.parent_code = p.parent_code AND b.qc_status = 'Passed'),
 			(SELECT COUNT(*) FROM bundles b WHERE b.parent_code = p.parent_code AND b.qc_status = 'Rejected'),
-			COALESCE(p.remarks, ''), COALESCE(p.attrs_json, '{}'), p.created_at
+			COALESCE(p.remarks, ''), COALESCE(p.attrs_json, '{}'),
+			COALESCE(p.invoice_id, ''), COALESCE(p.fabric_products_json, '[]'), COALESCE(p.qr_copies_per_bundle, 3),
+			p.created_at
 		FROM parent_inward_lots p
 		WHERE p.parent_code = ?
 	`, cleanCode).Scan(
@@ -1168,7 +1483,9 @@ func (s *Service) GetLot(parentCode string) (LotDetail, error) {
 		&item.VendorColor, &item.FpccColor,
 		&item.Stage, &item.NoOfBundles,
 		&item.InspectedBundles, &item.PassedBundles, &item.RejectedBundles,
-		&item.Remarks, &rawAttrs, &item.CreatedAt,
+		&item.Remarks, &rawAttrs,
+		&item.InvoiceID, &rawFabProds, &item.QRCopiesPerBundle,
+		&item.CreatedAt,
 	)
 	if err == sql.ErrNoRows {
 		return LotDetail{}, fmt.Errorf("lot %s not found", cleanCode)
@@ -1179,6 +1496,10 @@ func (s *Service) GetLot(parentCode string) (LotDetail, error) {
 	if rawAttrs != "" {
 		_ = json.Unmarshal([]byte(rawAttrs), &item.Attrs)
 	}
+	item.FabricProducts = []FabricProductItem{}
+	if rawFabProds != "" {
+		_ = json.Unmarshal([]byte(rawFabProds), &item.FabricProducts)
+	}
 
 	// 2. Fetch Bundles
 	bundleRows, err := s.db.Query(`
@@ -1188,6 +1509,7 @@ func (s *Service) GetLot(parentCode string) (LotDetail, error) {
 			COALESCE(measured_gsm, 0), COALESCE(measured_dia, 0),
 			COALESCE(size_spec, ''), COALESCE(rate, 0), location_bin,
 			qc_status, COALESCE(qc_remarks, ''), COALESCE(qc_image_url, ''),
+			COALESCE(qc_audio_url, ''), COALESCE(qc_transcript, ''),
 			COALESCE(qc_inspected_at, 0), COALESCE(bundle_comment, ''), COALESCE(qr_payload, '{}')
 		FROM bundles
 		WHERE parent_code = ?
@@ -1207,6 +1529,7 @@ func (s *Service) GetLot(parentCode string) (LotDetail, error) {
 			&b.MeasuredGsm, &b.MeasuredDia,
 			&b.SizeSpec, &b.Rate, &b.LocationBin,
 			&b.QcStatus, &b.QcRemarks, &b.QcImageUrl,
+			&b.QcAudioUrl, &b.QcTranscript,
 			&b.QcInspectedAt, &b.BundleComment, &b.QRPayload,
 		)
 		if err != nil {

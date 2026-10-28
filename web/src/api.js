@@ -81,6 +81,22 @@ export const api = {
     return json.nextParentCode || '';
   },
 
+  async searchInvoices(query = '') {
+    const url = query ? `${API_BASE}/inventory/invoices?q=${encodeURIComponent(query)}` : `${API_BASE}/inventory/invoices`;
+    const res = await fetch(url);
+    const json = await res.json();
+    return json.data || [];
+  },
+
+  async getInvoice(invoiceNo) {
+    const res = await fetch(`${API_BASE}/inventory/invoices/${encodeURIComponent(invoiceNo)}`);
+    const json = await res.json();
+    if (!res.ok || json.success === false) {
+      throw new Error(json.error || `Failed to fetch invoice ${invoiceNo}`);
+    }
+    return json.data;
+  },
+
   async inwardParentLot(payload) {
     const res = await fetch(`${API_BASE}/inventory/inward`, {
       method: 'POST',
