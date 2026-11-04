@@ -73,13 +73,23 @@
     'Self-Adhesive Polybag 12x15', 'Master Carton 7-Ply Heavy Duty',
     'Brown Paper Wrap Roll', 'Branded Hangtag Polybag Set'
   ];
-  const processMasters = ['Cutting', 'Branding', 'Machine', 'Finishing', 'Packing'];
-  const vendorMasters = [
-    'Cutting Room Line A', 'Stitching Floor Line 1', 'Stitching Floor Line 2',
-    'Rajesh Embroidery Works', 'Apex Screen Printing Works', 'YKK India Pvt Ltd',
-    'Arvind Mills Ltd', 'Vardhman Textiles Ltd', 'Finishing & Steam Iron Section',
-    'Packing Section Floor 3'
+  const defaultProcessMasters = [
+    'Fabric order', 'Fabric checking', 'Cutting', 'bundling', 'branding', 'branding check',
+    'machine', 'Kaaj', 'button', 'Snap button', 'eyelet', 'heatseal', 'bartak', 'draw cord',
+    'Thread cutting', 'checking', 'ironing', 'final QC', 'Packing', 'FRI'
   ];
+  let processMasters = $derived((masters.order_processes && masters.order_processes.length > 0)
+    ? masters.order_processes.map(p => p.display_name)
+    : defaultProcessMasters);
+
+  let vendorMasters = $derived((masters.vendors && masters.vendors.length > 0)
+    ? masters.vendors.map(v => v.name)
+    : [
+        'Cutting Room Line A', 'Stitching Floor Line 1', 'Stitching Floor Line 2',
+        'Rajesh Embroidery Works', 'Apex Screen Printing Works', 'YKK India Pvt Ltd',
+        'Arvind Mills Ltd', 'Vardhman Textiles Ltd', 'Finishing & Steam Iron Section',
+        'Packing Section Floor 3'
+      ]);
 
   // Derived current active item
   let currentItem = $derived(

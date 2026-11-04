@@ -50,26 +50,54 @@
   const freightModes = ['Surface', 'Air', 'Courier', 'Self-Pickup'];
   const freightCosts = ['Inclusive', 'Extra', 'To be paid by client'];
 
-  const apparelSubCategories = [
-    { display_name: 'Polo Shirt' },
-    { display_name: 'Round Neck T-Shirt' },
-    { display_name: 'V-Neck T-Shirt' },
-    { display_name: 'Hoodie' },
-    { display_name: 'Sweatshirt' },
-    { display_name: 'Joggers / Trackpants' },
-    { display_name: 'Shorts' },
-    { display_name: 'Jacket' },
-    { display_name: 'Jersey' }
+  const defaultApparelSubCategories = [
+    { display_name: 'Polo' },
+    { display_name: 'Bottoms' },
+    { display_name: 'Jackets' },
+    { display_name: 'Hoodies and Pullovers' },
+    { display_name: 'Skorts' },
+    { display_name: 'Dresses' },
+    { display_name: 'Onsies' },
+    { display_name: 'Caps' },
+    { display_name: 'Traded apparel' }
   ];
 
-  const nonApparelSubCategories = [
-    { display_name: 'Drinkware / Sippers' },
-    { display_name: 'Bags & Backpacks' },
-    { display_name: 'Caps & Headwear' },
-    { display_name: 'Notebooks & Stationery' },
-    { display_name: 'Lanyards & Badges' },
-    { display_name: 'Tech Accessories' }
+  const defaultNonApparelSubCategories = [
+    { display_name: 'Drinkwear' },
+    { display_name: 'Headgear' },
+    { display_name: 'Bags' },
+    { display_name: 'Stationery' },
+    { display_name: 'Electronics' },
+    { display_name: 'Others' }
   ];
+
+  let apparelSubCategories = $derived.by(() => {
+    if (masters.subcategories && masters.subcategories.length > 0) {
+      const filtered = masters.subcategories.filter(s => s.meta && s.meta.category === 'Apparel');
+      if (filtered.length > 0) return filtered;
+    }
+    return defaultApparelSubCategories;
+  });
+
+  let nonApparelSubCategories = $derived.by(() => {
+    if (masters.subcategories && masters.subcategories.length > 0) {
+      const filtered = masters.subcategories.filter(s => s.meta && s.meta.category === 'Non Apparel');
+      if (filtered.length > 0) return filtered;
+    }
+    return defaultNonApparelSubCategories;
+  });
+
+  let brandingTypes = $derived((masters.branding_types && masters.branding_types.length > 0)
+    ? masters.branding_types.map(b => ({ value: b.display_name, label: b.display_name }))
+    : [
+        { value: 'Print', label: 'Screen Print' },
+        { value: 'DTF', label: 'Direct to Film (DTF)' },
+        { value: 'Plastisol Print', label: 'Plastisol Print' },
+        { value: 'HD print', label: 'High Density (HD) Print' },
+        { value: 'Waterbased Print', label: 'Waterbased Print' },
+        { value: 'Embroidery', label: 'Embroidery' },
+        { value: 'Unik', label: 'Unik' }
+      ]);
 
   function createInitialProductItem() {
     return {
@@ -899,6 +927,7 @@
                 <div class="matrix-section-wrap">
                   <GenderSizeMatrix
                     category={item.category}
+                    subCategory={item.subCategory}
                     bind:totalQty={item.totalQty}
                     bind:matrix={item.matrix}
                     unitPrice={item.unitPrice}
@@ -908,41 +937,38 @@
 
                 <!-- BRANDING & EMBELLISHMENTS (MULTIPLE PER PRODUCT) -->
                 <div class="brandings-section-wrap">
-                  <EmbellishmentList bind:brandings={item.brandings} />
+                  <EmbellishmentList bind:brandings={item.brandings} {brandingTypes} />
                 </div>
 
                 <!-- LABELS & PACKAGING -->
                 <div class="trims-packaging-grid">
                   <div class="form-group">
                     <label for="item-main-label-{item.id}">Main Label</label>
-                    <input
-                      id="item-main-label-{item.id}"
-                      type="text"
-                      class="input-control"
+                    <Combobox
+                      category="label"
                       placeholder="Woven Satin / Heat Transfer..."
                       bind:value={item.mainLabel}
+                      items={masters.labels || []}
                     />
                   </div>
 
                   <div class="form-group">
                     <label for="item-other-label-{item.id}">Other Labels (Care / Size / Flag)</label>
-                    <input
-                      id="item-other-label-{item.id}"
-                      type="text"
-                      class="input-control"
+                    <Combobox
+                      category="label"
                       placeholder="Wash care label, size pip..."
                       bind:value={item.otherLabel}
+                      items={masters.labels || []}
                     />
                   </div>
 
                   <div class="form-group">
                     <label for="item-pkg-{item.id}">Customer Packaging Specs</label>
-                    <input
-                      id="item-pkg-{item.id}"
-                      type="text"
-                      class="input-control"
+                    <Combobox
+                      category="cust_packaging"
                       placeholder="Self adhesive polybag, barcode sticker..."
                       bind:value={item.custPackaging}
+                      items={masters.cust_packaging || []}
                     />
                   </div>
                 </div>

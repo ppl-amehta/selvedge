@@ -2,16 +2,21 @@
   import { api } from '../api.js';
 
   let {
-    brandings = $bindable([])
+    brandings = $bindable([]),
+    brandingTypes = null
   } = $props();
 
-  const brandingTypes = [
-    { value: 'emb', label: 'Embroidery (emb)' },
-    { value: 'print', label: 'Screen Print (print)' },
-    { value: 'dtf', label: 'Direct to Film (dtf)' },
-    { value: 'unik', label: 'Unik / High Density (unik)' },
-    { value: 'other', label: 'Other Embellishment (other)' }
+  const fallbackBrandingTypes = [
+    { value: 'Print', label: 'Screen Print' },
+    { value: 'DTF', label: 'Direct to Film (DTF)' },
+    { value: 'Plastisol Print', label: 'Plastisol Print' },
+    { value: 'HD print', label: 'High Density (HD) Print' },
+    { value: 'Waterbased Print', label: 'Waterbased Print' },
+    { value: 'Embroidery', label: 'Embroidery' },
+    { value: 'Unik', label: 'Unik' }
   ];
+
+  let resolvedBrandingTypes = $derived(brandingTypes && brandingTypes.length > 0 ? brandingTypes : fallbackBrandingTypes);
 
   let uploadingIndex = $state(-1);
 
@@ -20,7 +25,7 @@
       ...brandings,
       {
         id: 'bnd_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
-        brandingType: 'emb',
+        brandingType: 'Print',
         position: 'Left Chest',
         size: '',
         placement: '',
@@ -87,7 +92,7 @@
             <div class="field">
               <label for="emb-type-{item.id}">Type</label>
               <select id="emb-type-{item.id}" class="select-control" bind:value={item.brandingType}>
-                {#each brandingTypes as t}
+                {#each resolvedBrandingTypes as t}
                   <option value={t.value}>{t.label}</option>
                 {/each}
               </select>

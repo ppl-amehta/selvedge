@@ -56,6 +56,7 @@ func main() {
 		"migrations/005_order_prep_and_planning.sql",
 		"migrations/006_floor_cutting_station.sql",
 		"migrations/007_invoices_and_multi_fabric_lots.sql",
+		"migrations/008_consolidate_master_dropdowns.sql",
 	}
 
 	for _, mFile := range migrationFiles {

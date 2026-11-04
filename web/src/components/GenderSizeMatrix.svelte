@@ -1,17 +1,51 @@
 <script>
   let {
     category = 'Apparel',
+    subCategory = '',
     totalQty = $bindable(0),
     matrix = $bindable({}),
     unitPrice = 0,
     isLocked = $bindable(false)
   } = $props();
 
-  const apparelSizes = ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL', 'Free'];
-  const nonApparelSizes = ['Standard / Free', 'Small', 'Medium', 'Large'];
-  const allGenders = ['Men', 'Women', 'Unisex', 'Kids'];
+  const standardApparelSizes = ['XXS', 'XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL', 'Custom'];
+  const waistApparelSizes = ['32', '34', '36', '38', '40', '42', '44', '46', '48', '50', '52'];
+  const infantSizes = ['0-3', '3-6', '6-9', '9-12', '12-15', '15-18'];
+  const kidsSizes = ['K16', 'K18', 'K20', 'K22', 'K24', 'K26', 'K28', 'K30', 'K32', 'K34', 'K36'];
+  const juniorSizes = ['Jr-XS', 'Jr-S', 'Jr-M', 'Jr-L'];
 
+  const drinkwearSizes = ['100ml', '150ml', '200ml', '250ml', '300ml', '500ml', '750ml', '1Litre', '1.5 Litre', '2 Litre'];
+  const headgearSizes = ['Std', 'Kids', 'Large', 'Small'];
+  const bagsSizes = ['Std'];
+  const stationerySizes = ['A4', 'A3', 'A5', 'A6', 'B5'];
+  const defaultNonApparelSizes = ['Standard / Free', 'Small', 'Medium', 'Large'];
+
+  const allGenders = ['Men', 'Women', 'Unisex', 'Infant', 'Jr', 'Kids'];
   let activeGenders = $state(['Men', 'Women']);
+  let apparelScaleMode = $state('alpha'); // 'alpha' (XXS..5XL) or 'numeric' (32..52)
+
+  let adultSizes = $derived(apparelScaleMode === 'numeric' ? waistApparelSizes : standardApparelSizes);
+
+  let nonApparelSizes = $derived.by(() => {
+    const sc = (subCategory || '').toLowerCase();
+    if (sc.includes('drink')) return drinkwearSizes;
+    if (sc.includes('head') || sc.includes('cap')) return headgearSizes;
+    if (sc.includes('bag')) return bagsSizes;
+    if (sc.includes('station') || sc.includes('note')) return stationerySizes;
+    return defaultNonApparelSizes;
+  });
+
+  let adultActiveGenders = $derived(activeGenders.filter(g => ['Men', 'Women', 'Unisex'].includes(g)));
+  let infantActiveGenders = $derived(activeGenders.filter(g => g === 'Infant'));
+  let kidsActiveGenders = $derived(activeGenders.filter(g => g === 'Kids'));
+  let jrActiveGenders = $derived(activeGenders.filter(g => g === 'Jr'));
+
+  function getSizesForGender(g) {
+    if (g === 'Infant') return infantSizes;
+    if (g === 'Kids') return kidsSizes;
+    if (g === 'Jr') return juniorSizes;
+    return adultSizes;
+  }
 
   // Ensure matrix structure is initialized
   $effect(() => {
@@ -34,7 +68,8 @@
     if (category === 'Apparel') {
       for (const g of activeGenders) {
         const row = matrix[g] || {};
-        for (const s of apparelSizes) {
+        const szs = getSizesForGender(g);
+        for (const s of szs) {
           sum += parseInt(row[s], 10) || 0;
         }
       }
@@ -88,7 +123,7 @@
         {#if category === 'Apparel'}
           Multi-Gender Breakdown • Authoritative Math Checked
         {:else}
-          Non-Apparel Unit Allocation Matrix
+          Non-Apparel ({subCategory || 'General'}) Allocation Matrix
         {/if}
       </span>
     </div>
@@ -137,54 +172,179 @@
           {activeGenders.includes(g) ? '✓ ' : '+ '}{g}
         </button>
       {/each}
+
+      {#if adultActiveGenders.length > 0}
+        <div class="scale-mode-toggle">
+          <button
+            type="button"
+            class="scale-chip {apparelScaleMode === 'alpha' ? 'active' : ''}"
+            onclick={() => apparelScaleMode = 'alpha'}
+          >
+            Alpha (XXS–5XL)
+          </button>
+          <button
+            type="button"
+            class="scale-chip {apparelScaleMode === 'numeric' ? 'active' : ''}"
+            onclick={() => apparelScaleMode = 'numeric'}
+          >
+            Waist (32–52)
+          </button>
+        </div>
+      {/if}
     </div>
 
-    <!-- 2D Matrix Grid -->
-    <div class="table-scroll-container">
-      <table class="matrix-table">
-        <thead>
-          <tr>
-            <th class="gender-col">Gender</th>
-            {#each apparelSizes as s}
-              <th class="size-col">{s}</th>
-            {/each}
-            <th class="total-col">Subtotal</th>
-          </tr>
-        </thead>
-        <tbody>
-          {#each activeGenders as g}
-            {@const gRow = matrix[g] || {}}
-            {@const rowSum = apparelSizes.reduce((sum, s) => sum + (parseInt(gRow[s], 10) || 0), 0)}
+    <!-- 2D Matrix Grids by Scale Group -->
+    {#if adultActiveGenders.length > 0}
+      <div class="table-scroll-container mb-3">
+        <table class="matrix-table">
+          <thead>
             <tr>
-              <td class="gender-cell"><strong>{g}</strong></td>
-              {#each apparelSizes as s}
-                <td class="size-cell">
-                  <input
-                    type="number"
-                    min="0"
-                    placeholder="0"
-                    class="cell-input {parseInt(gRow[s], 10) > 0 ? 'filled' : ''}"
-                    bind:value={gRow[s]}
-                  />
-                </td>
+              <th class="gender-col">Adult Gender</th>
+              {#each adultSizes as s}
+                <th class="size-col">{s}</th>
               {/each}
-              <td class="row-sum-cell">{rowSum} Pcs</td>
+              <th class="total-col">Subtotal</th>
             </tr>
-          {/each}
-        </tbody>
-        <tfoot>
-          <tr class="summary-row">
-            <td class="gender-cell"><strong>Column Totals</strong></td>
-            {#each apparelSizes as s}
-              {@const colSum = activeGenders.reduce((sum, g) => sum + (parseInt((matrix[g] || {})[s], 10) || 0), 0)}
-              <td class="col-sum-cell">{colSum || '-'}</td>
+          </thead>
+          <tbody>
+            {#each adultActiveGenders as g}
+              {@const gRow = matrix[g] || {}}
+              {@const rowSum = adultSizes.reduce((sum, s) => sum + (parseInt(gRow[s], 10) || 0), 0)}
+              <tr>
+                <td class="gender-cell"><strong>{g}</strong></td>
+                {#each adultSizes as s}
+                  <td class="size-cell">
+                    <input
+                      type="number"
+                      min="0"
+                      placeholder="0"
+                      class="cell-input {parseInt(gRow[s], 10) > 0 ? 'filled' : ''}"
+                      bind:value={gRow[s]}
+                    />
+                  </td>
+                {/each}
+                <td class="row-sum-cell">{rowSum} Pcs</td>
+              </tr>
             {/each}
-            <td class="grand-total-cell">
-              <strong>{calculatedMatrixSum} Pcs</strong>
-            </td>
-          </tr>
-        </tfoot>
-      </table>
+          </tbody>
+        </table>
+      </div>
+    {/if}
+
+    {#if infantActiveGenders.length > 0}
+      <div class="table-scroll-container mb-3">
+        <table class="matrix-table">
+          <thead>
+            <tr>
+              <th class="gender-col">Infant (Months)</th>
+              {#each infantSizes as s}
+                <th class="size-col">{s} M</th>
+              {/each}
+              <th class="total-col">Subtotal</th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each infantActiveGenders as g}
+              {@const gRow = matrix[g] || {}}
+              {@const rowSum = infantSizes.reduce((sum, s) => sum + (parseInt(gRow[s], 10) || 0), 0)}
+              <tr>
+                <td class="gender-cell"><strong>{g}</strong></td>
+                {#each infantSizes as s}
+                  <td class="size-cell">
+                    <input
+                      type="number"
+                      min="0"
+                      placeholder="0"
+                      class="cell-input {parseInt(gRow[s], 10) > 0 ? 'filled' : ''}"
+                      bind:value={gRow[s]}
+                    />
+                  </td>
+                {/each}
+                <td class="row-sum-cell">{rowSum} Pcs</td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
+    {/if}
+
+    {#if kidsActiveGenders.length > 0}
+      <div class="table-scroll-container mb-3">
+        <table class="matrix-table">
+          <thead>
+            <tr>
+              <th class="gender-col">Kids Scale</th>
+              {#each kidsSizes as s}
+                <th class="size-col">{s}</th>
+              {/each}
+              <th class="total-col">Subtotal</th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each kidsActiveGenders as g}
+              {@const gRow = matrix[g] || {}}
+              {@const rowSum = kidsSizes.reduce((sum, s) => sum + (parseInt(gRow[s], 10) || 0), 0)}
+              <tr>
+                <td class="gender-cell"><strong>{g}</strong></td>
+                {#each kidsSizes as s}
+                  <td class="size-cell">
+                    <input
+                      type="number"
+                      min="0"
+                      placeholder="0"
+                      class="cell-input {parseInt(gRow[s], 10) > 0 ? 'filled' : ''}"
+                      bind:value={gRow[s]}
+                    />
+                  </td>
+                {/each}
+                <td class="row-sum-cell">{rowSum} Pcs</td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
+    {/if}
+
+    {#if jrActiveGenders.length > 0}
+      <div class="table-scroll-container mb-3">
+        <table class="matrix-table">
+          <thead>
+            <tr>
+              <th class="gender-col">Junior Scale</th>
+              {#each juniorSizes as s}
+                <th class="size-col">{s}</th>
+              {/each}
+              <th class="total-col">Subtotal</th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each jrActiveGenders as g}
+              {@const gRow = matrix[g] || {}}
+              {@const rowSum = juniorSizes.reduce((sum, s) => sum + (parseInt(gRow[s], 10) || 0), 0)}
+              <tr>
+                <td class="gender-cell"><strong>{g}</strong></td>
+                {#each juniorSizes as s}
+                  <td class="size-cell">
+                    <input
+                      type="number"
+                      min="0"
+                      placeholder="0"
+                      class="cell-input {parseInt(gRow[s], 10) > 0 ? 'filled' : ''}"
+                      bind:value={gRow[s]}
+                    />
+                  </td>
+                {/each}
+                <td class="row-sum-cell">{rowSum} Pcs</td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
+    {/if}
+
+    <div class="matrix-summary-bar">
+      <span>Total Matrix Allocation Across All Scales:</span>
+      <strong class="summary-qty">{calculatedMatrixSum} Pcs</strong>
     </div>
   {:else}
     <!-- Non-Apparel Simplified Size Matrix -->
@@ -343,6 +503,54 @@
     background: rgba(37, 99, 235, 0.15);
     border-color: var(--accent-primary);
     color: #93c5fd;
+  }
+
+  .scale-mode-toggle {
+    display: flex;
+    gap: 4px;
+    margin-left: auto;
+  }
+
+  .scale-chip {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-subtle);
+    font-size: 10px;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+  }
+
+  .scale-chip.active {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: var(--text-muted);
+    color: var(--text-main);
+  }
+
+  .mb-3 {
+    margin-bottom: 12px;
+  }
+
+  .matrix-summary-bar {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 12px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 6px;
+  }
+
+  .summary-qty {
+    font-family: var(--font-mono);
+    font-weight: 800;
+    color: var(--accent-emerald);
+    font-size: 13px;
   }
 
   .table-scroll-container {

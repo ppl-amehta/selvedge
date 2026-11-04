@@ -170,12 +170,21 @@
   // =========================================================
   // MASTER DATA DROPDOWNS & OPTIONS
   // =========================================================
-  const inwardTypeOptions = ['Fabric', 'Zips', 'Packaging', 'Trims', 'Finished Goods', 'Labels'];
-
-  const fabricTypeOptions = [
-    'Single Jersey', 'Pique', 'Fleece', 'Rib 1x1 / 2x2', 'Interlock', 
-    'Collar', 'Cuff', 'Bonded', 'Canvass', 'WR-rain', 'Looperknit', 'NS Lycra', 'Hemp', 'Terry', 'Knitted', 'Woven'
+  const defaultInwardTypes = [
+    'Fabric', 'Zips', 'packaging', 'Trims', 'Label', 'Apparel',
+    'Other Inwards', 'Electronic', 'Drinkwear', 'Headgear', 'Bags', 'Stationery'
   ];
+  let inwardTypeOptions = $derived((masters.inward_types && masters.inward_types.length > 0)
+    ? masters.inward_types.map(i => i.display_name)
+    : defaultInwardTypes);
+
+  const defaultFabricTypes = [
+    'Fabric', 'Collar', 'Cuff', 'Rib', 'Bonded', 'Canvass', 'Fleece', 'Grindle', 'Hemp',
+    'Interlock', 'Jacquard', 'Knitted', 'Looperknit', 'NS Lycra', 'Pique', 'Single Jersey', 'Terry', 'Woven', 'WR-rain'
+  ];
+  let fabricTypeOptions = $derived((masters.fabric_types && masters.fabric_types.length > 0)
+    ? masters.fabric_types.map(f => f.display_name)
+    : defaultFabricTypes);
 
   const standardGsmOptions = ['140', '160', '180', '200', '220', '240', '260', '280', '300', '320', '350', '380', '400'];
   const standardDiaOptions = ['24"', '26"', '28"', '30"', '32"', '34"', '36"', '40"', '48"', '60"'];
@@ -185,16 +194,36 @@
     '60% Cotton 40% Polyester', '100% Polyester', '100% Hemp', '80% Cotton 20% Polyester', '100% Linen'
   ];
 
-  const zipTypeOptions = ['Coil', 'Waterproof', 'Vislon Zip', 'Two way Coil', 'Metal', 'Reverse Coil', 'Aluminium', 'Steel', 'Invisible'];
-  const zipSliderOptions = ['Auto-lock', 'DA8DR4', 'DADR7 EJ PB 12', 'metal', 'rubber', 'Non-lock', 'Pin-lock', 'Reversible', 'Spring-lock', 'Semi-auto'];
-  const zipClosureOptions = ['Open-end (OE)', 'Closed-ended (CE)', 'Two-way open-end', 'Roll continuous'];
-  const teethColorOptions = ['Antique Brass', 'Gunmetal', 'Shiny Silver', 'Matte Black', 'Golden', 'Rainbow', 'Silver Nickel'];
+  let zipTypeOptions = $derived((masters.zip_types && masters.zip_types.length > 0)
+    ? masters.zip_types.map(z => z.display_name)
+    : ['Coil', 'Waterproof', 'Vislon Zip', 'Two way Coil', 'Metal', 'Reverse Coil', 'Aluminium', 'Plastic']);
 
-  const packagingTypeOptions = ['Polybag', 'Tape', 'Hangtag', 'Loop Pins', 'Courier Bag', 'Butter Paper', 'Carton', 'Silica Gel', 'Barcode Sticker', 'Hanger'];
-  const trimTypeOptions = ['Elastic', 'Tapes', 'Cord', 'Button', 'Eyelet', 'Rivet', 'Badge', 'Drawcord', 'Stopper', 'Aglet', 'Twill Tape', 'Thread Elastic'];
+  let zipSliderOptions = $derived((masters.zip_sliders && masters.zip_sliders.length > 0)
+    ? masters.zip_sliders.map(z => z.display_name)
+    : ['Auto-lock', 'DA8DR4', 'DADR7 EJ PB 12', 'metal', 'rubber', 'DA8DR7', 'DABDR4']);
+
+  let zipClosureOptions = $derived((masters.zip_closures && masters.zip_closures.length > 0)
+    ? masters.zip_closures.map(z => z.display_name)
+    : ['open ended', 'closed ended', '2 way', 'roll']);
+
+  let teethColorOptions = $derived((masters.zip_finishes && masters.zip_finishes.length > 0)
+    ? masters.zip_finishes.map(z => z.display_name)
+    : ['Antique Brass', 'Gunmetal', 'Shiny Silver', 'Matte Black', 'Golden', 'Antique silver', 'Gold', 'Matt silver', 'Matt Gold']);
+
+  let packagingTypeOptions = $derived((masters.packaging_types && masters.packaging_types.length > 0)
+    ? masters.packaging_types.map(p => p.display_name)
+    : ['Polybag', 'Carton Tape', 'Hangtag', 'Loop Pins', 'Butter Paper', 'Carton', 'Sticker', 'Shrink wrap', 'Courier Bag', 'Other']);
+
+  let trimTypeOptions = $derived((masters.trim_types && masters.trim_types.length > 0)
+    ? masters.trim_types.map(t => t.display_name)
+    : ['Elastic', 'Tapes', 'Cord', 'Button', 'Fusing', 'Thread', 'Eyelets', 'Stopper', 'Other Trims']);
+
   const trimSizeOptions = ['14L', '16L', '18L', '20L', '24L', '28L', '32L', '36L', '40L', '5mm', '8mm', '10mm', '12mm', '15mm', '20mm', '25mm', '30mm', '38mm', '50mm', 'Round', 'Flat'];
   const labelTypeOptions = ['Damask Woven', 'Printed Satin', 'Heat Transfer Tagless', 'Leather / Jacron Patch', 'Paper Sticker', 'Tag Label', 'Woven Taffeta'];
-  const labelGenreOptions = ['Main Label', 'Size label', 'Main+Size Label', 'Wash Care', 'COO', 'Flag Label', 'Hem Tag', 'Side Label'];
+  let labelGenreOptions = $derived((masters.label_genres && masters.label_genres.length > 0)
+    ? masters.label_genres.map(l => l.display_name)
+    : ['Woven', 'Printed', 'DTF', 'Tareaway', 'Main Label', 'Size label', 'Main+Size Label', 'washcare Label', 'COO Label', 'side Label']);
+
   const fgTypeOptions = ['Polo', 'T-Shirt', 'Hoodie', 'Sweatshirt', 'Joggers', 'Jacket', 'Shorts', 'Tracksuit'];
   const qcRemarkOptions = [
     'Clean / OK - Flawless inspection pass',
@@ -208,7 +237,9 @@
   ];
 
   // Common quick-staging warehouse bins for one-tap allocation
-  const quickBins = ['A/R01/S01', 'A/R01/S02', 'B/R02/S01', 'B/R02/S02', 'C/R03/S01'];
+  let quickBins = $derived((masters.locations && masters.locations.length > 0)
+    ? masters.locations.slice(0, 8).map(l => l.code)
+    : ['1.M/R/O', '2.M/R/W', '3.M/R/C', '4.Cutting Room', 'A/R01/S01', 'A/R01/S02', 'B/R02/S01', 'B/R02/S02']);
 
   // Master Entities & Categorized Lists
   let vendorOptions = $derived((masters.vendors || []).map(v => ({ value: v.name, label: v.name })));

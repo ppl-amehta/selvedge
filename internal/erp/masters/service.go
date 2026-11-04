@@ -42,40 +42,105 @@ func (s *Service) GetAllMasters() (map[string]any, error) {
 	// 1. Entities (Vendors & Clients)
 	vendors, err := s.listEntities("vendor")
 	if err != nil {
-		return nil, err
+		vendors = make([]Entity, 0)
 	}
 	clients, err := s.listEntities("client")
 	if err != nil {
-		return nil, err
+		clients = make([]Entity, 0)
 	}
 
-	// 2. Master items by category
-	fabrics, _ := s.listMasterItems("fabric")
-	colors, _ := s.listMasterItems("color")
-	locations, _ := s.listMasterItems("location")
-	uoms, _ := s.listMasterItems("uom")
-	products, _ := s.listMasterItems("product")
-	zips, _ := s.listMasterItems("zip")
-	trims, _ := s.listMasterItems("trim")
-	labels, _ := s.listMasterItems("label")
-	packaging, _ := s.listMasterItems("packaging")
+	// 2. Fetch all master items in a single grouped query (single WAL read snapshot)
+	categoriesMap := map[string][]MasterItem{
+		"fabric":           make([]MasterItem, 0),
+		"color":            make([]MasterItem, 0),
+		"location":         make([]MasterItem, 0),
+		"uom":              make([]MasterItem, 0),
+		"product":          make([]MasterItem, 0),
+		"zip":              make([]MasterItem, 0),
+		"trim":             make([]MasterItem, 0),
+		"label":            make([]MasterItem, 0),
+		"packaging":        make([]MasterItem, 0),
+		"product_category": make([]MasterItem, 0),
+		"subcategory":      make([]MasterItem, 0),
+		"gender":           make([]MasterItem, 0),
+		"branding_type":    make([]MasterItem, 0),
+		"inward_type":      make([]MasterItem, 0),
+		"cust_packaging":   make([]MasterItem, 0),
+		"order_process":    make([]MasterItem, 0),
+		"size_scale":       make([]MasterItem, 0),
+		"size":             make([]MasterItem, 0),
+		"fabric_type":      make([]MasterItem, 0),
+		"zip_type":         make([]MasterItem, 0),
+		"zip_slider":       make([]MasterItem, 0),
+		"zip_size":         make([]MasterItem, 0),
+		"zip_closure":      make([]MasterItem, 0),
+		"zip_finish":       make([]MasterItem, 0),
+		"trim_type":        make([]MasterItem, 0),
+		"label_brand":      make([]MasterItem, 0),
+		"label_additional": make([]MasterItem, 0),
+		"label_genre":      make([]MasterItem, 0),
+		"washcare":         make([]MasterItem, 0),
+		"packaging_type":   make([]MasterItem, 0),
+		"packaging_size":   make([]MasterItem, 0),
+	}
+
+	rows, err := s.db.Query("SELECT id, category, code, display_name, coalesce(meta_json, '{}') FROM master_items ORDER BY display_name")
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var m MasterItem
+			var metaStr string
+			if err := rows.Scan(&m.ID, &m.Category, &m.Code, &m.DisplayName, &metaStr); err == nil {
+				m.Meta, _ = graph.DecodeProps(metaStr)
+				if m.Meta == nil {
+					m.Meta = make(map[string]any)
+				}
+				categoriesMap[m.Category] = append(categoriesMap[m.Category], m)
+			}
+		}
+	}
 
 	// 3. Recent Orders
 	recentOrders, _ := s.listRecentOrders()
+	if recentOrders == nil {
+		recentOrders = make([]map[string]any, 0)
+	}
 
 	return map[string]any{
-		"vendors":   vendors,
-		"clients":   clients,
-		"fabrics":   fabrics,
-		"colors":    colors,
-		"locations": locations,
-		"uoms":      uoms,
-		"products":  products,
-		"zips":      zips,
-		"trims":     trims,
-		"labels":    labels,
-		"packaging": packaging,
-		"orders":    recentOrders,
+		"vendors":            vendors,
+		"clients":            clients,
+		"fabrics":            categoriesMap["fabric"],
+		"colors":             categoriesMap["color"],
+		"locations":          categoriesMap["location"],
+		"uoms":               categoriesMap["uom"],
+		"products":           categoriesMap["product"],
+		"zips":               categoriesMap["zip"],
+		"trims":              categoriesMap["trim"],
+		"labels":             categoriesMap["label"],
+		"packaging":          categoriesMap["packaging"],
+		"product_categories": categoriesMap["product_category"],
+		"subcategories":      categoriesMap["subcategory"],
+		"genders":            categoriesMap["gender"],
+		"branding_types":     categoriesMap["branding_type"],
+		"inward_types":       categoriesMap["inward_type"],
+		"cust_packaging":     categoriesMap["cust_packaging"],
+		"order_processes":    categoriesMap["order_process"],
+		"size_scales":        categoriesMap["size_scale"],
+		"sizes":              categoriesMap["size"],
+		"fabric_types":       categoriesMap["fabric_type"],
+		"zip_types":          categoriesMap["zip_type"],
+		"zip_sliders":        categoriesMap["zip_slider"],
+		"zip_sizes":          categoriesMap["zip_size"],
+		"zip_closures":       categoriesMap["zip_closure"],
+		"zip_finishes":       categoriesMap["zip_finish"],
+		"trim_types":         categoriesMap["trim_type"],
+		"label_brands":       categoriesMap["label_brand"],
+		"label_additionals":  categoriesMap["label_additional"],
+		"label_genres":       categoriesMap["label_genre"],
+		"washcare":           categoriesMap["washcare"],
+		"packaging_types":    categoriesMap["packaging_type"],
+		"packaging_sizes":    categoriesMap["packaging_size"],
+		"orders":             recentOrders,
 	}, nil
 }
 
@@ -87,7 +152,7 @@ func (s *Service) listEntities(entityType string) ([]Entity, error) {
 	}
 	defer rows.Close()
 
-	var list []Entity
+	list := make([]Entity, 0)
 	for rows.Next() {
 		var e Entity
 		if err := rows.Scan(&e.ID, &e.Name, &e.EntityType, &e.ContactPerson, &e.Phone, &e.Email, &e.Gstin, &e.Address); err != nil {
@@ -106,7 +171,7 @@ func (s *Service) listMasterItems(category string) ([]MasterItem, error) {
 	}
 	defer rows.Close()
 
-	var list []MasterItem
+	list := make([]MasterItem, 0)
 	for rows.Next() {
 		var m MasterItem
 		var metaStr string
@@ -114,6 +179,9 @@ func (s *Service) listMasterItems(category string) ([]MasterItem, error) {
 			return nil, err
 		}
 		m.Meta, _ = graph.DecodeProps(metaStr)
+		if m.Meta == nil {
+			m.Meta = make(map[string]any)
+		}
 		list = append(list, m)
 	}
 	return list, nil
@@ -129,7 +197,7 @@ func (s *Service) listRecentOrders() ([]map[string]any, error) {
 	}
 	defer rows.Close()
 
-	var list []map[string]any
+	list := make([]map[string]any, 0)
 	for rows.Next() {
 		var ordNo, soNo, client, prod, col, status string
 		var qty int

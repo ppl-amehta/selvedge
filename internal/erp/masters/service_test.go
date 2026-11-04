@@ -1,0 +1,95 @@
+package masters
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/ppl-amehta/selvedge/internal/graph"
+	"github.com/ppl-amehta/selvedge/internal/platform/db"
+)
+
+func TestMasterCatalogConsolidation(t *testing.T) {
+	testDbPath := filepath.Join(os.TempDir(), "test_selvedge_masters.db")
+	_ = os.Remove(testDbPath)
+	defer os.Remove(testDbPath)
+
+	database, err := db.Connect(testDbPath)
+	if err != nil {
+		t.Fatalf("failed to connect db: %v", err)
+	}
+	defer database.Close()
+
+	// Apply migrations
+	migrations := []string{
+		"../../../migrations/001_initial_graph.sql",
+		"../../../migrations/002_seed_masters.sql",
+		"../../../migrations/008_consolidate_master_dropdowns.sql",
+	}
+	for _, mFile := range migrations {
+		content, err := os.ReadFile(mFile)
+		if err != nil {
+			t.Fatalf("failed to read migration %s: %v", mFile, err)
+		}
+		if err := database.RunMigrations(mFile, string(content)); err != nil {
+			t.Fatalf("migration %s failed: %v", mFile, err)
+		}
+	}
+
+	graphStore := graph.NewStore(database.DB)
+	mastersService := NewService(database.DB, graphStore)
+
+	masters, err := mastersService.GetAllMasters()
+	if err != nil {
+		t.Fatalf("GetAllMasters failed: %v", err)
+	}
+
+	// Verify non-null array responses for core master categories
+	requiredKeys := []string{
+		"vendors", "clients", "fabrics", "colors", "locations", "uoms", "products",
+		"zips", "trims", "labels", "packaging", "product_categories", "subcategories",
+		"genders", "branding_types", "inward_types", "cust_packaging", "order_processes",
+		"size_scales", "sizes", "fabric_types", "zip_types", "packaging_types",
+	}
+
+	for _, k := range requiredKeys {
+		val, exists := masters[k]
+		if !exists || val == nil {
+			t.Fatalf("expected key %s to exist in GetAllMasters response", k)
+		}
+	}
+
+	// Verify specific counts
+	uoms := masters["uoms"].([]MasterItem)
+	if len(uoms) < 11 {
+		t.Errorf("expected >= 11 uoms, got %d", len(uoms))
+	}
+
+	locations := masters["locations"].([]MasterItem)
+	if len(locations) < 200 {
+		t.Errorf("expected >= 200 locations, got %d", len(locations))
+	}
+
+	genders := masters["genders"].([]MasterItem)
+	if len(genders) < 6 {
+		t.Errorf("expected >= 6 genders, got %d", len(genders))
+	}
+
+	inwardTypes := masters["inward_types"].([]MasterItem)
+	if len(inwardTypes) < 12 {
+		t.Errorf("expected >= 12 inward types, got %d", len(inwardTypes))
+	}
+
+	vendors := masters["vendors"].([]Entity)
+	if len(vendors) < 60 {
+		t.Errorf("expected >= 60 vendors, got %d", len(vendors))
+	}
+
+	clients := masters["clients"].([]Entity)
+	if len(clients) < 80 {
+		t.Errorf("expected >= 80 clients, got %d", len(clients))
+	}
+
+	t.Logf("✓ Successfully validated consolidated masters: %d vendors, %d clients, %d locations, %d UOMs, %d genders, %d inward types",
+		len(vendors), len(clients), len(locations), len(uoms), len(genders), len(inwardTypes))
+}
