@@ -16,5 +16,8 @@
     "svelte-check": "^4.3.8",
     "typescript": "^5.9.3",
     "vite": "^8.3.8"
+  },
+  "devDependencies": {
+    "@typescript/native-preview": "^7.0.0-dev.20260707.2"
   }
 }

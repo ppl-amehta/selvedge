@@ -6,7 +6,17 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
-    sourcemap: false
+    sourcemap: false,
+    minify: true,
+    rolldownOptions: {
+      output: {
+        minify: {
+          compress: {
+            dropConsole: false
+          }
+        }
+      }
+    }
   },
   server: {
     port: 5173,

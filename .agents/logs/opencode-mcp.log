@@ -24,3 +24,7 @@
 [2026-11-16T16:26:02.573Z] TOOL=opencode_code_review MODEL=glm-5.3-flash DURATION=120059ms STATUS=ERROR REVIEW_TARGET="web/src/views/OrderTakingView.svelte" FOCUS="correctness, reactivity, and Svelte 5 rune scoping" SKILLS=""
 [2026-11-16T16:28:34.965Z] TOOL=opencode_code_review MODEL=mimo-v2.6-flash DURATION=120038ms STATUS=ERROR REVIEW_TARGET="diff --git a/web/src/views/InwardView.svelte b/web/src/views/InwardView.svelte
 -" FOCUS="Svelte 5 reactivity loop prevention with untrack and loop variable scope correctness" SKILLS=""
+[2026-11-16T16:48:46.460Z] TOOL=opencode_ask MODEL=glm-5.3-flash DURATION=74864ms STATUS=SUCCESS PROMPT="Validate the frontend tooling architecture for Selvedge: 1. Vite 8 adopting Rust-native Rolldown 1.2" SKILLS=""
+[2026-11-16T16:50:56.859Z] TOOL=opencode_code_review MODEL=mimo-v2.6-flash DURATION=120043ms STATUS=ERROR REVIEW_TARGET="diff --git a/web/jsconfig.json b/web/jsconfig.json
+--- a/web/jsconfig.json
++++ b" FOCUS="frontend build tooling, Vite 8 rolldownOptions, and TypeScript native checkJs configuration" SKILLS=""
