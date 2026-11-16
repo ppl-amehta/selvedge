@@ -42,8 +42,8 @@ RUN CGO_ENABLED=1 GOOS=linux \
     -ldflags="-s -w -extldflags '-static'" \
     -o /bin/selvedge ./cmd/selvedge
 
-# Strictly verify binary is 100% static (fail build if dynamically linked)
-RUN ldd /bin/selvedge 2>&1 | grep -i "not a dynamic executable"
+# Strictly verify binary is 100% static (matches both musl and glibc static output)
+RUN ldd /bin/selvedge 2>&1 | grep -iE "not a (dynamic executable|valid dynamic program)"
 
 # --------------------------------------------------------
 # Stage 3: Minimal Hardened Alpine 3.21 Runtime (~25MB)
