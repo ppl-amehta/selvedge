@@ -303,5 +303,74 @@ export const api = {
       throw new Error(json.error || `Failed to advance order state to ${targetState}`);
     }
     return json.data;
+  },
+
+  // --- Station 4: Floor Cutting Station ---
+  async listCuttingOrders() {
+    const res = await fetch(`${API_BASE}/cutting/orders`);
+    const json = await res.json();
+    if (!res.ok || json.success === false) {
+      throw new Error(json.error || 'Failed to list cutting orders');
+    }
+    return json.data || [];
+  },
+
+  async getCuttingJob(idOrOrderNo) {
+    const res = await fetch(`${API_BASE}/cutting/job/${encodeURIComponent(idOrOrderNo)}`);
+    const json = await res.json();
+    if (!res.ok || json.success === false) {
+      throw new Error(json.error || `Failed to fetch cutting job ${idOrOrderNo}`);
+    }
+    return json.data;
+  },
+
+  async issueRollToJob(payload) {
+    const res = await fetch(`${API_BASE}/cutting/issue-roll`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const json = await res.json();
+    if (!res.ok || json.success === false) {
+      throw new Error(json.error || 'Failed to issue roll to cutting job');
+    }
+    return json;
+  },
+
+  async recordCutLay(payload) {
+    const res = await fetch(`${API_BASE}/cutting/record-lay`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const json = await res.json();
+    if (!res.ok || json.success === false) {
+      throw new Error(json.error || 'Failed to record cut lay');
+    }
+    return json.data;
+  },
+
+  async recordCuttingRemnant(payload) {
+    const res = await fetch(`${API_BASE}/cutting/record-remnant`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const json = await res.json();
+    if (!res.ok || json.success === false) {
+      throw new Error(json.error || 'Failed to record remnant roll');
+    }
+    return json.data;
+  },
+
+  async getBundleSlip(bundleId) {
+    const res = await fetch(`${API_BASE}/cutting/bundle-slip/${encodeURIComponent(bundleId)}`, {
+      method: 'POST'
+    });
+    const json = await res.json();
+    if (!res.ok || json.success === false) {
+      throw new Error(json.error || `Failed to fetch bundle slip ${bundleId}`);
+    }
+    return json.data;
   }
 };

@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -17,7 +17,8 @@ import (
 
 type DB struct {
 	*sql.DB
-	Engine string
+	Engine   string
+	IsSQLite bool
 }
 
 // Connect initializes SQLite with industrial factory settings or LibSQL cloud when configured
@@ -31,6 +32,7 @@ func Connect(dbPath string) (*DB, error) {
 		tursoURL = os.Getenv("DATABASE_URL")
 	}
 
+	isSQLite := false
 	if tursoURL != "" && (strings.HasPrefix(tursoURL, "libsql://") || strings.HasPrefix(tursoURL, "https://") || strings.HasPrefix(tursoURL, "http://")) {
 		token := os.Getenv("TURSO_AUTH_TOKEN")
 		u, parseErr := url.Parse(tursoURL)
@@ -61,11 +63,12 @@ func Connect(dbPath string) (*DB, error) {
 			return nil, fmt.Errorf("failed to open sqlite database: %w", err)
 		}
 		engineName = fmt.Sprintf("Local SQLite WAL (%s)", dbPath)
+		isSQLite = true
 	}
 
-	// Configure connection pool with WAL / cloud concurrency support
-	db.SetMaxOpenConns(25)
-	db.SetMaxIdleConns(5)
+	// Configure connection pool optimized for single-writer SQLite WAL / cloud concurrency
+	db.SetMaxOpenConns(8)
+	db.SetMaxIdleConns(4)
 	db.SetConnMaxLifetime(15 * time.Minute)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -75,8 +78,8 @@ func Connect(dbPath string) (*DB, error) {
 		return nil, fmt.Errorf("failed to ping database (%s): %w", engineName, err)
 	}
 
-	log.Printf("✓ Connected to database: %s", engineName)
-	return &DB{DB: db, Engine: engineName}, nil
+	slog.Info("connected to database", "engine", engineName)
+	return &DB{DB: db, Engine: engineName, IsSQLite: isSQLite}, nil
 }
 
 // RunMigrations executes SQL schema scripts in order with schema_migrations tracking
@@ -96,8 +99,11 @@ func (d *DB) RunMigrations(migrationName string, migrationSql string) error {
 	}
 	defer tx.Rollback()
 
+	baseName := filepath.Base(migrationName)
+	canonicalKey := "migrations/" + baseName
+
 	var count int
-	err = tx.QueryRow("SELECT COUNT(*) FROM schema_migrations WHERE version = ?", migrationName).Scan(&count)
+	err = tx.QueryRow("SELECT COUNT(*) FROM schema_migrations WHERE version = ? OR version = ?", canonicalKey, baseName).Scan(&count)
 	if err != nil {
 		return fmt.Errorf("failed to check migration status for %s: %w", migrationName, err)
 	}
@@ -111,7 +117,7 @@ func (d *DB) RunMigrations(migrationName string, migrationSql string) error {
 		}
 	}
 
-	_, err = tx.Exec("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)", migrationName, time.Now().UTC().UnixMilli())
+	_, err = tx.Exec("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)", canonicalKey, time.Now().UTC().UnixMilli())
 	if err != nil {
 		return fmt.Errorf("failed to record migration %s: %w", migrationName, err)
 	}
@@ -120,7 +126,19 @@ func (d *DB) RunMigrations(migrationName string, migrationSql string) error {
 		return fmt.Errorf("failed to commit migration %s: %w", migrationName, err)
 	}
 
-	log.Printf("✓ Migration %s successfully applied", migrationName)
+	slog.Info("migration successfully applied", "version", canonicalKey)
+	return nil
+}
+
+// CheckpointWAL truncates the write-ahead log cleanly on shutdown
+func (d *DB) CheckpointWAL(ctx context.Context) error {
+	if d.IsSQLite {
+		_, err := d.DB.ExecContext(ctx, "PRAGMA wal_checkpoint(TRUNCATE);")
+		if err != nil {
+			return fmt.Errorf("wal checkpoint failed: %w", err)
+		}
+		slog.Info("sqlite wal checkpoint completed (TRUNCATE)")
+	}
 	return nil
 }
 

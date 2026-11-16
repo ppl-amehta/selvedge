@@ -5,9 +5,9 @@
 # ========================================================
 
 # --------------------------------------------------------
-# Stage 1: Build Svelte 5 Embedded Frontend
+# Stage 1: Build Svelte 5 Embedded Frontend (Native Builder Platform)
 # --------------------------------------------------------
-FROM node:24-alpine AS web-builder
+FROM --platform=$BUILDPLATFORM node:24-alpine AS web-builder
 
 WORKDIR /build/web
 
@@ -42,8 +42,8 @@ RUN CGO_ENABLED=1 GOOS=linux \
     -ldflags="-s -w -extldflags '-static'" \
     -o /bin/selvedge ./cmd/selvedge
 
-# Verify binary is static
-RUN ldd /bin/selvedge 2>&1 | grep -i "not a dynamic executable" || true
+# Strictly verify binary is 100% static (fail build if dynamically linked)
+RUN ldd /bin/selvedge 2>&1 | grep -i "not a dynamic executable"
 
 # --------------------------------------------------------
 # Stage 3: Minimal Hardened Alpine 3.21 Runtime (~25MB)

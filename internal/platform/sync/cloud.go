@@ -6,7 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -47,11 +47,11 @@ func NewCloudSyncer(db *sql.DB, cfg CloudSyncConfig) *CloudSyncer {
 // Start begins the background edge-to-cloud outbox synchronization loop
 func (s *CloudSyncer) Start(ctx context.Context) {
 	if s.cfg.HQEndpoint == "" {
-		log.Println("Notice: Cloud HQ sync disabled (HQ_ENDPOINT not configured)")
+		slog.Info("cloud hq sync disabled (HQ_ENDPOINT not configured)")
 		return
 	}
 
-	log.Printf("✓ Cloud HQ Syncer active: streaming events to %s", s.cfg.HQEndpoint)
+	slog.Info("cloud hq syncer active", "endpoint", s.cfg.HQEndpoint)
 
 	ticker := time.NewTicker(s.cfg.SyncInterval)
 	defer ticker.Stop()
@@ -62,7 +62,7 @@ func (s *CloudSyncer) Start(ctx context.Context) {
 			return
 		case <-ticker.C:
 			if err := s.syncBatch(); err != nil {
-				log.Printf("Cloud HQ sync warning: %v (queued locally in SQLite WAL)", err)
+				slog.Warn("cloud hq sync warning", "error", err)
 			}
 		}
 	}
@@ -134,6 +134,6 @@ func (s *CloudSyncer) syncBatch() error {
 		return fmt.Errorf("hq gateway responded with HTTP %d", resp.StatusCode)
 	}
 
-	log.Printf("☁️ Synced %d domain event(s) to Central Cloud HQ", len(batch))
+	slog.Info("synced domain events to central cloud HQ", "count", len(batch))
 	return nil
 }

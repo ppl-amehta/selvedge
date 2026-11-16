@@ -4,11 +4,16 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"log"
+	"io/fs"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
+	"sort"
+	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -21,6 +26,7 @@ import (
 	"github.com/ppl-amehta/selvedge/internal/platform/db"
 	"github.com/ppl-amehta/selvedge/internal/platform/router"
 	"github.com/ppl-amehta/selvedge/internal/workflow"
+	"github.com/ppl-amehta/selvedge/migrations"
 	"github.com/ppl-amehta/selvedge/web"
 )
 
@@ -34,39 +40,54 @@ func main() {
 		fmt.Sscanf(envPort, "%d", port)
 	}
 
-	log.Printf("==================================================")
-	log.Printf(" FPCC SELVEDGE ENTERPRISE EDGE ENGINE")
-	log.Printf(" Unified Graph System of Record & Smart Workflows")
-	log.Printf(" Architecture: Go 1.27 + SQLite WAL + Chi SPA")
-	log.Printf("==================================================")
+	// 0. Initialize Modern Structured slog Handler
+	var handler slog.Handler
+	if os.Getenv("LOG_FORMAT") == "json" || os.Getenv("FLY_MACHINE_ID") != "" {
+		handler = slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo})
+	} else {
+		handler = slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo})
+	}
+	logger := slog.New(handler)
+	slog.SetDefault(logger)
+
+	slog.Info("starting Selvedge enterprise engine",
+		"version", "1.0.0-production",
+		"go_version", runtime.Version(),
+		"architecture", "Go 1.27 + SQLite WAL + Svelte 5",
+	)
 
 	// 1. Database Connection
 	database, err := db.Connect(*dbPath)
 	if err != nil {
-		log.Fatalf("FATAL: Failed to connect to database: %v", err)
+		slog.Error("failed to connect to database", "error", err)
+		os.Exit(1)
 	}
 	defer database.Close()
 
-	// 2. Run Database Migrations
-	migrationFiles := []string{
-		"migrations/001_initial_graph.sql",
-		"migrations/002_seed_masters.sql",
-		"migrations/003_multi_product_orders.sql",
-		"migrations/004_three_stage_inward_pipeline.sql",
-		"migrations/005_order_prep_and_planning.sql",
-		"migrations/006_floor_cutting_station.sql",
-		"migrations/007_invoices_and_multi_fabric_lots.sql",
-		"migrations/008_consolidate_master_dropdowns.sql",
+	// 2. Run Database Migrations via Embedded FS (Dynamically Discovered & Lexically Sorted)
+	entries, err := fs.ReadDir(migrations.FS, ".")
+	if err != nil {
+		slog.Error("failed to discover embedded migrations", "error", err)
+		os.Exit(1)
 	}
 
-	for _, mFile := range migrationFiles {
-		if content, err := os.ReadFile(mFile); err == nil {
-			log.Printf("Applying migration: %s ...", mFile)
-			if err := database.RunMigrations(mFile, string(content)); err != nil {
-				log.Fatalf("FATAL: Migration failed on %s: %v", mFile, err)
-			}
-		} else {
-			log.Printf("Notice: Migration file not found (skipping): %s", mFile)
+	migrationNames := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".sql") {
+			migrationNames = append(migrationNames, entry.Name())
+		}
+	}
+	sort.Strings(migrationNames)
+
+	for _, mFile := range migrationNames {
+		content, err := migrations.FS.ReadFile(mFile)
+		if err != nil {
+			slog.Error("embedded migration file read error", "file", mFile, "error", err)
+			os.Exit(1)
+		}
+		if err := database.RunMigrations("migrations/"+mFile, string(content)); err != nil {
+			slog.Error("database migration failed", "file", mFile, "error", err)
+			os.Exit(1)
 		}
 	}
 
@@ -75,7 +96,7 @@ func main() {
 	workflowEngine := workflow.NewEngine(database.DB)
 
 	if err := workflowEngine.SeedDefaultRules(); err != nil {
-		log.Printf("Warning: Failed to seed workflow rules: %v", err)
+		slog.Warn("failed to seed workflow rules", "error", err)
 	}
 
 	// 4. Initialize Domain ERP Services
@@ -85,23 +106,25 @@ func main() {
 	planningService := planning.NewService(database.DB, graphStore, workflowEngine)
 	cuttingService := cutting.NewService(database.DB, graphStore, workflowEngine)
 
-	// 5. Start Background Outbox Poller
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	// 5. Start Background Outbox Poller with Controlled Shutdown Sync
+	pollerCtx, cancelPoller := context.WithCancel(context.Background())
+	var pollerWG sync.WaitGroup
+	pollerWG.Add(1)
 
 	go func() {
+		defer pollerWG.Done()
 		ticker := time.NewTicker(3 * time.Second)
 		defer ticker.Stop()
 		for {
 			select {
-			case <-ctx.Done():
+			case <-pollerCtx.Done():
 				return
 			case <-ticker.C:
 				count, err := workflowEngine.ProcessPendingEvents()
 				if err != nil {
-					log.Printf("Outbox poller error: %v", err)
+					slog.Error("outbox poller error", "error", err)
 				} else if count > 0 {
-					log.Printf("⚡ Dispatched %d background domain event(s) through workflow rules", count)
+					slog.Info("dispatched background domain events", "count", count)
 				}
 			}
 		}
@@ -110,7 +133,7 @@ func main() {
 	// 6. Router Setup with Svelte 5 Embedded SPA
 	svelteFS, err := web.GetFS()
 	if err != nil {
-		log.Printf("Notice: Embedded Svelte dist not found: %v", err)
+		slog.Warn("embedded Svelte dist not found", "error", err)
 	}
 
 	absWebDir, _ := filepath.Abs(*webDir)
@@ -130,6 +153,7 @@ func main() {
 	server := &http.Server{
 		Addr:         fmt.Sprintf(":%d", *port),
 		Handler:      r,
+		ErrorLog:     slog.NewLogLogger(logger.Handler(), slog.LevelWarn),
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,
 		IdleTimeout:  60 * time.Second,
@@ -139,21 +163,38 @@ func main() {
 	stopChan := make(chan os.Signal, 1)
 	signal.Notify(stopChan, os.Interrupt, syscall.SIGTERM)
 
+	serverErrChan := make(chan error, 1)
 	go func() {
-		log.Printf("✓ Server listening at: http://localhost:%d", *port)
-		log.Printf("✓ Station 0 (Order Taking) & Station 1 (Inward) active on port %d", *port)
+		slog.Info("http server listening", "port", *port, "url", fmt.Sprintf("http://localhost:%d", *port))
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("FATAL: HTTP server crashed: %v", err)
+			serverErrChan <- err
 		}
 	}()
 
-	<-stopChan
-	log.Println("Shutting down Selvedge gracefully...")
+	select {
+	case <-stopChan:
+		slog.Info("initiating graceful shutdown signal...")
+	case err := <-serverErrChan:
+		slog.Error("http server crashed unexpectedly", "error", err)
+	}
+
+	// First stop accepting new HTTP requests
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer shutdownCancel()
 
 	if err := server.Shutdown(shutdownCtx); err != nil {
-		log.Printf("Server shutdown error: %v", err)
+		slog.Error("server shutdown error", "error", err)
 	}
-	log.Println("Selvedge server terminated cleanly.")
+
+	// Next, stop outbox poller and wait for active ticks to finish
+	cancelPoller()
+	pollerWG.Wait()
+	slog.Info("outbox poller terminated cleanly")
+
+	// Flush SQLite WAL safely with no concurrent writers
+	if err := database.CheckpointWAL(shutdownCtx); err != nil {
+		slog.Warn("wal shutdown checkpoint warning", "error", err)
+	}
+
+	slog.Info("Selvedge server terminated cleanly")
 }

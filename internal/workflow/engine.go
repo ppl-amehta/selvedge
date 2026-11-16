@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
@@ -198,7 +198,7 @@ func (e *Engine) SeedDefaultRules() error {
 		}
 	}
 
-	log.Println("✓ Workflow automation rules initialized (Shortage debit note, BOM allocation, Defect alert)")
+	slog.Info("workflow automation rules initialized", "rules", "Shortage debit note, BOM allocation, Defect alert")
 	return nil
 }
 

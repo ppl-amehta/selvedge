@@ -60,19 +60,25 @@ jobs:
     name: 🚀 GitOps Deploy to Free Serverless Tier
     needs: publish-container
     runs-on: ubuntu-latest
+    env:
+      FLY_TOKEN_SET: ${{ secrets.FLY_API_TOKEN != '' }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Deploy to Fly.io Machine Architecture
-        if: env.FLY_API_TOKEN != ''
+      - name: Setup Flyctl CLI
+        if: env.FLY_TOKEN_SET == 'true'
         uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Deploy to Fly.io Machine Architecture
+        if: env.FLY_TOKEN_SET == 'true'
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
         run: |
-          flyctl deploy --remote-only --app fpcc-selvedge || echo "Notice: Set FLY_API_TOKEN secret to enable automatic Fly.io zero-downtime deployment"
+          flyctl deploy --remote-only --app fpcc-selvedge
 
       - name: Live Smoke Test Verification Probe
         run: |
           echo "✓ Container built and pushed to: ghcr.io/${{ github.repository }}:latest"
+          echo "✓ Tag: ${{ needs.publish-container.outputs.image_tag }}"
           echo "✓ Deployment manifests ready: fly.toml, deploy/koyeb.yaml, deploy/render.yaml, deploy/litestream.yml"
