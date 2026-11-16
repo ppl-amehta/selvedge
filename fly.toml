@@ -13,6 +13,7 @@ primary_region = "bom"
   PORT = "4000"
   DB_PATH = "/data/selvedge.db"
   TZ = "Asia/Kolkata"
+  LOG_FORMAT = "json"
 
 [mounts]
   source = "selvedge_data"
