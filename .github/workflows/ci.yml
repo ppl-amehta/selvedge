@@ -117,16 +117,12 @@ jobs:
           go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
           govulncheck ./...
 
+      - name: Setup Trivy Scanner
+        uses: aquasecurity/setup-trivy@v0.3.1
+
       - name: Aqua Security Trivy Filesystem & Secret Scan
-        uses: aquasecurity/trivy-action@v0.29.0
-        with:
-          scan-type: 'fs'
-          scan-ref: '.'
-          scanners: 'vuln,secret'
-          skip-dirs: 'web/node_modules,.git'
-          format: 'table'
-          exit-code: '1'
-          severity: 'CRITICAL,HIGH'
+        run: |
+          trivy fs --scanners vuln,secret --skip-dirs web/node_modules,.git --exit-code 1 --severity CRITICAL,HIGH .
 
   # ----------------------------------------------------
   # Gate 4: Docker Multi-Stage Build & Image Verification
