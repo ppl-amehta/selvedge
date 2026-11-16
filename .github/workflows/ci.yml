@@ -117,7 +117,7 @@ jobs:
 
       - name: Run Govulncheck (Official Go Vulnerability Database)
         run: |
-          go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
+          go install golang.org/x/vuln/cmd/govulncheck@v1.9.0
           govulncheck ./...
 
       - name: Setup Trivy Scanner
