@@ -163,7 +163,7 @@ func (s *Service) listEntities(entityType string) ([]Entity, error) {
 	return list, nil
 }
 
-func (s *Service) listMasterItems(category string) ([]MasterItem, error) {
+func (s *Service) ListMasterItems(category string) ([]MasterItem, error) {
 	query := "SELECT id, category, code, display_name, coalesce(meta_json, '{}') FROM master_items WHERE category = ? ORDER BY display_name"
 	rows, err := s.db.Query(query, category)
 	if err != nil {

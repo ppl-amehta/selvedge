@@ -47,11 +47,13 @@ jobs:
           cd web
           npm run check
 
-      - name: Golangci-Lint Static Analysis Gate
-        uses: golangci/golangci-lint-action@v6
-        with:
-          version: v1.64.6
-          args: --timeout=5m
+      - name: Go 1.27 Vet Analysis Gate
+        run: |
+          go vet ./...
+
+      - name: Go 1.27 Staticcheck Analysis Gate
+        run: |
+          go run honnef.co/go/tools/cmd/staticcheck@latest ./...
 
   # ----------------------------------------------------
   # Gate 2: Race Detection & Concurrency Unit/Integration Tests

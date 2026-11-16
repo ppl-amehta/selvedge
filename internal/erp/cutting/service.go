@@ -714,12 +714,6 @@ func (s *Service) RecordRemnant(p RecordRemnantPayload) (*RemnantRecord, error) 
 	if prefix != "Bit" && prefix != "Rej" {
 		return nil, fmt.Errorf("prefix must be strictly 'Bit' (usable remnant) or 'Rej' (rejection)")
 	}
-	cleanRoll := strings.ReplaceAll(p.SourceRollCode, "-", "")
-	cleanRoll = strings.ReplaceAll(cleanRoll, " ", "")
-	cleanRoll = strings.ReplaceAll(cleanRoll, "/", "_")
-	if cleanRoll == "" {
-		cleanRoll = time.Now().Format("060102")
-	}
 
 	// Format required by Arjav notes: Bit240426A-1/6 or Rej240426A-1/6
 	remnantID := fmt.Sprintf("%s%s", prefix, p.SourceRollCode)

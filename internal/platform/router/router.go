@@ -678,7 +678,6 @@ func NewRouter(svc AppServices) http.Handler {
 
 func setupMiddleware(r *chi.Mux) {
 	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP)
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 	r.Use(cors.Handler(cors.Options{
