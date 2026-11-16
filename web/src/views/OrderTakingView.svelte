@@ -712,12 +712,12 @@
       </div>
 
       <div class="products-list">
-        {#each items as item, itemIdx}
+        {#each items as item, idx (item.id)}
           <div class="product-card {item.isLocked ? 'item-locked' : 'item-valid'}">
             <!-- Product Card Header -->
             <div class="product-card-head">
               <div class="head-left">
-                <span class="product-seq-badge">Product #{itemIdx + 1}</span>
+                <span class="product-seq-badge">Product #{idx + 1}</span>
                 <span class="product-title-text">{item.productName || 'Unspecified Product'}</span>
                 <span class="tag-pill">{item.category}</span>
                 <span class="tag-pill color-pill">{item.colorName}</span>
@@ -744,7 +744,7 @@
                   <button
                     type="button"
                     class="remove-item-btn"
-                    onclick={() => removeProductItem(itemIdx)}
+                    onclick={() => removeProductItem(idx)}
                     title="Remove product line"
                   >
                     ✕ Delete Line

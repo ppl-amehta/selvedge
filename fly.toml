@@ -3,8 +3,8 @@
 # Scale-to-Zero Container with Persistent NVMe Volume
 # ========================================================
 
-app = "fpcc-selvedge"
-primary_region = "bom"
+app = "selvedge"
+primary_region = "ams"
 
 [build]
   dockerfile = "Dockerfile"

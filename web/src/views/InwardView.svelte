@@ -1,5 +1,5 @@
 <script>
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { api } from '../api.js';
   import Combobox from '../components/Combobox.svelte';
   import QRTagModal from '../components/QRTagModal.svelte';
@@ -300,7 +300,7 @@
         const rCount = parseInt(fp.rollCount, 10) || 1;
         for (let r = 0; r < rCount; r++) {
           seq++;
-          const existing = gateBundles[seq - 1] || {};
+          const existing = (untrack(() => gateBundles))[seq - 1] || {};
           list.push({
             sequence: seq,
             total: totalCount,
@@ -317,7 +317,7 @@
       const count = parseInt(gateNoOfBundles, 10) || 1;
       const rateVal = parseFloat(gateTrimRate) || 0;
       for (let i = 1; i <= count; i++) {
-        const existing = gateBundles[i - 1] || {};
+        const existing = (untrack(() => gateBundles))[i - 1] || {};
         list.push({
           sequence: i,
           total: count,
