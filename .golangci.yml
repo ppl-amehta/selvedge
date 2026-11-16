@@ -1,0 +1,40 @@
+run:
+  timeout: 5m
+  tests: true
+  concurrency: 4
+
+linters:
+  enable:
+    - govet
+    - errcheck
+    - staticcheck
+    - unused
+    - gosec
+    - revive
+    - misspell
+    - gocyclo
+    - gocritic
+    - ineffassign
+    - typecheck
+
+linters-settings:
+  gocyclo:
+    min-complexity: 25
+  govet:
+    enable-all: false
+    shadow: true
+  gosec:
+    excludes:
+      - G104 # Unchecked errors in deferred calls (handled via defer closures or log)
+      - G115 # Integer overflow conversion where bounded
+  revive:
+    rules:
+      - name: exported
+        disabled: true
+      - name: package-comments
+        disabled: true
+
+issues:
+  exclude-use-default: true
+  max-issues-per-linter: 50
+  max-same-issues: 10

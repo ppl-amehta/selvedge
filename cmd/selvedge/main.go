@@ -115,6 +115,7 @@ func main() {
 
 	absWebDir, _ := filepath.Abs(*webDir)
 	r := router.NewRouter(router.AppServices{
+		DB:        database.DB,
 		Graph:     graphStore,
 		Workflow:  workflowEngine,
 		Masters:   mastersService,

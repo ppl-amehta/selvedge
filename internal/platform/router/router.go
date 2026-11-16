@@ -2,6 +2,7 @@ package router
 
 import (
 	"bytes"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -27,6 +29,7 @@ import (
 )
 
 type AppServices struct {
+	DB        *sql.DB
 	Graph     *graph.Store
 	Workflow  *workflow.Engine
 	Masters   *masters.Service
@@ -43,14 +46,34 @@ func NewRouter(svc AppServices) http.Handler {
 
 	setupMiddleware(r)
 
-	// 1. Health
+	// 1. Production Health & Readiness Probe
 	r.Get("/api/health", func(w http.ResponseWriter, req *http.Request) {
-		renderJSON(w, http.StatusOK, map[string]any{
-			"status":    "ok",
-			"system":    "FPCC Selvedge Enterprise Edge Engine",
-			"version":   "1.0.0-greenfield",
-			"arch":      "Unified Graph + Bi-Temporal Outbox (Go 1.27)",
-			"timestamp": graph.NowMs(),
+		dbStatus := "ok"
+		if svc.DB != nil {
+			if err := svc.DB.Ping(); err != nil {
+				dbStatus = "unreachable: " + err.Error()
+			}
+		}
+
+		var m runtime.MemStats
+		runtime.ReadMemStats(&m)
+
+		httpStatus := http.StatusOK
+		statusText := "healthy"
+		if dbStatus != "ok" {
+			httpStatus = http.StatusServiceUnavailable
+			statusText = "degraded"
+		}
+
+		renderJSON(w, httpStatus, map[string]any{
+			"status":          statusText,
+			"system":          "FPCC Selvedge Enterprise Edge Engine",
+			"version":         "1.0.0-production",
+			"arch":            "Unified Graph + Bi-Temporal Outbox (Go 1.27)",
+			"database":        dbStatus,
+			"goroutines":      runtime.NumGoroutine(),
+			"memory_alloc_mb": float64(m.Alloc) / 1024 / 1024,
+			"timestamp":       graph.NowMs(),
 		})
 	})
 

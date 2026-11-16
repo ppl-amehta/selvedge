@@ -1,0 +1,21 @@
+name: selvedge
+type: web
+docker:
+  dockerfile: Dockerfile
+regions:
+  - sin
+instance_type: free
+ports:
+  - port: 4000
+    protocol: http
+env:
+  PORT: "4000"
+  DB_PATH: "/data/selvedge.db"
+routes:
+  - path: /
+    port: 4000
+health_checks:
+  - http:
+      path: /api/health
+      interval: 30
+      timeout: 5

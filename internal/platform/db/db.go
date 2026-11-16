@@ -1,44 +1,82 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"log"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
+	_ "github.com/tursodatabase/libsql-client-go/libsql"
 )
 
 type DB struct {
 	*sql.DB
+	Engine string
 }
 
-// Connect initializes SQLite with industrial factory settings (WAL mode, busy timeout, foreign keys)
+// Connect initializes SQLite with industrial factory settings or LibSQL cloud when configured
 func Connect(dbPath string) (*DB, error) {
-	if err := os.MkdirAll(filepath.Dir(dbPath), 0755); err != nil {
-		return nil, fmt.Errorf("failed to create db directory: %w", err)
+	var db *sql.DB
+	var err error
+	var engineName string
+
+	tursoURL := os.Getenv("TURSO_DATABASE_URL")
+	if tursoURL == "" {
+		tursoURL = os.Getenv("DATABASE_URL")
 	}
 
-	// DSN with pragmas embedded (including _txlock=immediate to prevent deferred transaction deadlocks)
-	dsn := fmt.Sprintf("%s?_journal_mode=WAL&_busy_timeout=5000&_foreign_keys=ON&_synchronous=NORMAL&_txlock=immediate", dbPath)
-	db, err := sql.Open("sqlite3", dsn)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open sqlite database: %w", err)
+	if tursoURL != "" && (strings.HasPrefix(tursoURL, "libsql://") || strings.HasPrefix(tursoURL, "https://") || strings.HasPrefix(tursoURL, "http://")) {
+		token := os.Getenv("TURSO_AUTH_TOKEN")
+		u, parseErr := url.Parse(tursoURL)
+		if parseErr != nil {
+			return nil, fmt.Errorf("invalid LibSQL/Turso URL: %w", parseErr)
+		}
+		if token != "" {
+			q := u.Query()
+			q.Set("authToken", token)
+			u.RawQuery = q.Encode()
+		}
+		dsn := u.String()
+		db, err = sql.Open("libsql", dsn)
+		if err != nil {
+			return nil, fmt.Errorf("failed to open LibSQL/Turso database: %w", err)
+		}
+		// Redact token from engine description and log outputs
+		engineName = fmt.Sprintf("LibSQL / Turso Cloud (%s%s)", u.Host, u.Path)
+	} else {
+		if err := os.MkdirAll(filepath.Dir(dbPath), 0700); err != nil {
+			return nil, fmt.Errorf("failed to create db directory: %w", err)
+		}
+
+		// DSN with pragmas embedded (including _txlock=immediate to prevent deferred transaction deadlocks)
+		dsn := fmt.Sprintf("%s?_journal_mode=WAL&_busy_timeout=5000&_foreign_keys=ON&_synchronous=NORMAL&_txlock=immediate", dbPath)
+		db, err = sql.Open("sqlite3", dsn)
+		if err != nil {
+			return nil, fmt.Errorf("failed to open sqlite database: %w", err)
+		}
+		engineName = fmt.Sprintf("Local SQLite WAL (%s)", dbPath)
 	}
 
-	// Configure connection pool with WAL concurrency support
+	// Configure connection pool with WAL / cloud concurrency support
 	db.SetMaxOpenConns(25)
 	db.SetMaxIdleConns(5)
+	db.SetConnMaxLifetime(15 * time.Minute)
 
-	if err := db.Ping(); err != nil {
-		return nil, fmt.Errorf("failed to ping sqlite database: %w", err)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if err := db.PingContext(ctx); err != nil {
+		return nil, fmt.Errorf("failed to ping database (%s): %w", engineName, err)
 	}
 
-	log.Printf("✓ Connected to SQLite database at: %s (WAL mode active)", dbPath)
-	return &DB{db}, nil
+	log.Printf("✓ Connected to database: %s", engineName)
+	return &DB{DB: db, Engine: engineName}, nil
 }
 
 // RunMigrations executes SQL schema scripts in order with schema_migrations tracking
@@ -52,59 +90,46 @@ func (d *DB) RunMigrations(migrationName string, migrationSql string) error {
 		return fmt.Errorf("failed to ensure schema_migrations table: %w", err)
 	}
 
-	// Check if already applied
-	var count int
-	err = d.DB.QueryRow("SELECT COUNT(*) FROM schema_migrations WHERE version = ?", migrationName).Scan(&count)
-	if err == nil && count > 0 {
-		log.Printf("Migration %s already applied, skipping", migrationName)
-		return nil
-	}
-
-	queries := strings.Split(migrationSql, ";")
-
-	// 1. Run any PRAGMA statements first outside transaction
-	for _, query := range queries {
-		q := strings.TrimSpace(query)
-		if q == "" {
-			continue
-		}
-		if strings.HasPrefix(strings.ToUpper(q), "PRAGMA") {
-			if _, err := d.DB.Exec(q); err != nil {
-				log.Printf("Warning executing pragma %s: %v", q, err)
-			}
-		}
-	}
-
 	tx, err := d.Begin()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to begin migration transaction: %w", err)
 	}
 	defer tx.Rollback()
 
-	for _, query := range queries {
-		q := strings.TrimSpace(query)
-		if q == "" || strings.HasPrefix(strings.ToUpper(q), "PRAGMA") {
-			continue
-		}
-		if _, err := tx.Exec(q); err != nil {
-			return fmt.Errorf("migration statement failed in %s: %s: %w", migrationName, q, err)
+	var count int
+	err = tx.QueryRow("SELECT COUNT(*) FROM schema_migrations WHERE version = ?", migrationName).Scan(&count)
+	if err != nil {
+		return fmt.Errorf("failed to check migration status for %s: %w", migrationName, err)
+	}
+	if count > 0 {
+		return nil
+	}
+
+	if strings.TrimSpace(migrationSql) != "" {
+		if _, err := tx.Exec(migrationSql); err != nil {
+			return fmt.Errorf("migration statement failed in %s: %w", migrationName, err)
 		}
 	}
 
-	_, err = tx.Exec("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)", migrationName, timeNowMs())
+	_, err = tx.Exec("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)", migrationName, time.Now().UTC().UnixMilli())
 	if err != nil {
 		return fmt.Errorf("failed to record migration %s: %w", migrationName, err)
 	}
 
-	return tx.Commit()
-}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit migration %s: %w", migrationName, err)
+	}
 
-func timeNowMs() int64 {
-	return time.Now().UnixNano() / int64(time.Millisecond)
+	log.Printf("✓ Migration %s successfully applied", migrationName)
+	return nil
 }
 
 // WithTransaction runs a function within an atomic transaction
 func (d *DB) WithTransaction(fn func(tx *sql.Tx) error) error {
+	if fn == nil {
+		return fmt.Errorf("nil transaction function provided")
+	}
+
 	tx, err := d.Begin()
 	if err != nil {
 		return err

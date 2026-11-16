@@ -1,0 +1,45 @@
+# ========================================================
+# Fly.io Serverless Configuration (Apps v2)
+# Scale-to-Zero Container with Persistent NVMe Volume
+# ========================================================
+
+app = "fpcc-selvedge"
+primary_region = "bom"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "4000"
+  DB_PATH = "/data/selvedge.db"
+  TZ = "Asia/Kolkata"
+
+[mounts]
+  source = "selvedge_data"
+  destination = "/data"
+  initial_size = "3gb"
+
+[http_service]
+  internal_port = 4000
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ["app"]
+
+  [http_service.concurrency]
+    type = "requests"
+    hard_limit = 250
+    soft_limit = 200
+
+[[http_service.checks]]
+  interval = "30s"
+  timeout = "5s"
+  grace_period = "10s"
+  method = "GET"
+  path = "/api/health"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
+  cpus = 1

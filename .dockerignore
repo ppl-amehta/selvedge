@@ -1,0 +1,15 @@
+.git
+.gitignore
+.github
+.agents
+.live
+data/*.db
+data/*.db-wal
+data/*.db-shm
+selvedge
+*.log
+web/node_modules
+web/dist
+.DS_Store
+tmp/
+coverage.txt

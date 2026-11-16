@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: selvedge
+    env: docker
+    dockerfilePath: Dockerfile
+    plan: free
+    region: singapore
+    disk:
+      name: selvedge-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: PORT
+        value: "4000"
+      - key: DB_PATH
+        value: "/data/selvedge.db"
+    healthCheckPath: /api/health
