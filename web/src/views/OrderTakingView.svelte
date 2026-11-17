@@ -50,42 +50,92 @@
   const freightModes = ['Surface', 'Air', 'Courier', 'Self-Pickup'];
   const freightCosts = ['Inclusive', 'Extra', 'To be paid by client'];
 
-  const defaultApparelSubCategories = [
-    { display_name: 'Polo' },
-    { display_name: 'Bottoms' },
-    { display_name: 'Jackets' },
-    { display_name: 'Hoodies and Pullovers' },
-    { display_name: 'Skorts' },
-    { display_name: 'Dresses' },
-    { display_name: 'Onsies' },
-    { display_name: 'Caps' },
-    { display_name: 'Traded apparel' }
+  // Authoritative Master Genres from attached specifications
+  const apparelGenres = [
+    'Polo', 'Bottoms', 'Jackets', 'Hoodies and Pullovers', 'Skorts', 'Dresses', 'Onsies', 'Caps',
+    'Traded apparel', 'Quarter zip', 'Shirt', 'Shorts', 'Sweat Pants', 'Sweat shirt', 'Sweater',
+    'Sweatshirt', 'Tee', 'Tights', 'Vest'
   ];
 
-  const defaultNonApparelSubCategories = [
-    { display_name: 'Drinkwear' },
-    { display_name: 'Headgear' },
-    { display_name: 'Bags' },
-    { display_name: 'Stationery' },
-    { display_name: 'Electronics' },
-    { display_name: 'Others' }
+  const nonApparelGenres = [
+    'Drinkwear', 'Headgear', 'Bags', 'Stationary', 'Electronics', 'Others'
   ];
 
-  let apparelSubCategories = $derived.by(() => {
-    if (masters.subcategories && masters.subcategories.length > 0) {
-      const filtered = masters.subcategories.filter(s => s.meta && s.meta.category === 'Apparel');
-      if (filtered.length > 0) return filtered;
+  const brandLabelList = [
+    'ETTU', 'Jeep', 'OMG', 'Illa', 'Waterdrop', 'American Athlete', 'TUC', 'Chocotopia', 'Citreon'
+  ];
+
+  const additionalLabelTypes = [
+    'Size label', 'Main+Size Label', 'washcare Label', 'COO Label', 'side Label',
+    'Tag Label', 'Heatseal', 'Paper_sticker', 'DTF Branding', 'Flag Label', 'Patch Label'
+  ];
+
+  const labelGenres = ['Woven', 'Printed', 'DTF', 'Tareaway'];
+
+  const custPackagingOptions = [
+    'Poly-Carton', 'Poly+name', 'Ettu box with sticker', 'Ettu box with names', 'bulk packing', 'Golf Packing'
+  ];
+
+  const nonApparelSizesMap = {
+    'Drinkwear': ['100ml', '150ml', '200ml', '250ml', '300ml', '500ml', '750ml', '1Litre', '1.5 Litre', '2 Litre'],
+    'Headgear': ['Std', 'Kids', 'Large', 'Small'],
+    'Caps': ['Std', 'Kids', 'Large', 'Small'],
+    'Stationary': ['A4', 'A3', 'A5', 'A6', 'B5'],
+    'Stationery': ['A4', 'A3', 'A5', 'A6', 'B5'],
+    'Bags': ['15 Inch', '15.6 Inch', '10.5 Inch', 'Std'],
+    'Electronics': ['Std'],
+    'Others': ['Std']
+  };
+
+  const defaultLabelDescriptions = [
+    'CSCrew +size Navy/grey', 'CS Crew Navy/Grey', 'ETTU +Size Navy/aqua', 'ETTU +Size Grey/Navy',
+    'made in india white/black', 'CAT white/back', 'OMG navy/orange', 'size black/white',
+    'jeep patch black/white', 'Jeep Sleeve label black/white', 'jeep side label black/white',
+    'jeep 100% cotton', 'jeep 50%poly 50% cotton', 'jeep 95%poly 5% spandex', 'jeep 100% polyester',
+    'jeep 50% poly 45%cotton 5% spendex', 'jeep 88%poly 12% spendex', 'jeep 92% poly 8% spandex',
+    'size white/black', 'Citreon black/white', 'Citreon side label black/white', 'Citreon Cap Label Black/white',
+    'nvidia tag label black/grn', 'waterdrop size white/black', 'size label black/red', 'american athlete round label',
+    'amercian athlete tag', 'size black/beige', 'TUC Blazer', 'TUC Main', 'Cocotopia main', 'Chocotopia side label',
+    'size beige + Brown', 'size white/navy', 'Illa main label', 'Ettu Jr +Size white',
+    'ETTU onsie+composition+size white', 'ETTU onsie+composition+size cool grey', 'Nvidia +composition+size cool grey',
+    'Nvidia +composition+size white', 'nividia onsie+composition+size white', 'nividia onsie+composition+size cool grey',
+    'Ettu +size cool grey', 'Ettu +size white', 'Jeep Gender+size cool grey', 'Jeep Gender+size white',
+    'Cat composition +size white', 'Cat composition +size black', 'astryea white', 'cloudbolt white', 'cloud bolt black', 'sample'
+  ];
+
+  let labelDescriptionsList = $derived.by(() => {
+    if (masters.label_descriptions && masters.label_descriptions.length > 0) {
+      const dbNames = masters.label_descriptions.map(l => l.display_name || l.code || l);
+      return Array.from(new Set([...dbNames, ...defaultLabelDescriptions]));
     }
-    return defaultApparelSubCategories;
+    return defaultLabelDescriptions;
   });
 
-  let nonApparelSubCategories = $derived.by(() => {
-    if (masters.subcategories && masters.subcategories.length > 0) {
-      const filtered = masters.subcategories.filter(s => s.meta && s.meta.category === 'Non Apparel');
-      if (filtered.length > 0) return filtered;
+  function getNonApparelSizes(genre) {
+    const g = (genre || '').trim();
+    for (const [key, list] of Object.entries(nonApparelSizesMap)) {
+      if (g.toLowerCase().includes(key.toLowerCase())) return list;
     }
-    return defaultNonApparelSubCategories;
-  });
+    return ['Std', 'Small', 'Medium', 'Large'];
+  }
+
+  function getFilteredProductsFor(item) {
+    const list = masters.products || [];
+    if (item.subCategory) {
+      const sc = item.subCategory.toLowerCase().trim();
+      const matched = list.filter(p => {
+        const pSc = (p.meta?.subcategory || p.meta?.subCategory || '').toLowerCase().trim();
+        return pSc === sc;
+      });
+      if (matched.length > 0) return matched;
+    }
+    const isNA = item.category === 'Non Apparel' || item.category === 'Non-Apparel';
+    const targetCat = isNA ? 'non apparel' : 'apparel';
+    return list.filter(p => {
+      const pCat = (p.meta?.category || '').toLowerCase().replace('-', ' ').trim();
+      return pCat === targetCat;
+    });
+  }
 
   let brandingTypes = $derived((masters.branding_types && masters.branding_types.length > 0)
     ? masters.branding_types.map(b => ({ value: b.display_name, label: b.display_name }))
@@ -103,18 +153,24 @@
     return {
       id: 'it_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
       category: 'Apparel',
-      subCategory: 'Polo Shirt',
-      productName: 'Classic Pique Polo',
-      colorName: 'Navy Blue',
-      fabricName: '100% Cotton Pique 220 GSM',
+      subCategory: 'Polo',
+      productName: '3 Way polo',
+      colorName: 'Classic Navy',
+      fabricName: 'Pique',
+      size: '',
       unitPrice: 450.0,
       totalQty: 100,
       clientEtd: new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
       clientRemarks: '',
       productImageUrl: '',
-      mainLabel: 'Woven Satin Main Label',
-      otherLabel: 'Heat Transfer Care Label',
-      custPackaging: 'Self Adhesive Polybag',
+      brandLabel: 'ETTU',
+      brandLabelDesc: 'ETTU +Size Navy/aqua',
+      additionalLabels: [
+        { labelType: 'washcare Label', description: 'made in india white/black', genre: 'Woven' }
+      ],
+      mainLabel: 'ETTU (ETTU +Size Navy/aqua)',
+      otherLabel: 'washcare Label: made in india white/black',
+      custPackaging: 'Poly-Carton',
       matrix: {
         Men: { S: 20, M: 40, L: 20 },
         Women: { S: 10, M: 10 }
@@ -138,8 +194,6 @@
   }
 
   function addProductItem() {
-    // If there is an existing product item, copy its properties (fabric, color, labels, packaging, brandings, unitPrice, remarks)
-    // while strictly resetting quantities to 0!
     if (items.length > 0) {
       const prev = items[items.length - 1];
       const clonedBrandings = (prev.brandings || []).map(b => ({
@@ -147,26 +201,35 @@
         id: 'bnd_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
         brandingFileUrl: b.brandingFileUrl || ''
       }));
+      const clonedAdditionalLabels = (prev.additionalLabels || []).map(al => ({
+        ...al
+      }));
+
+      const isNonApp = prev.category === 'Non Apparel' || prev.category === 'Non-Apparel';
 
       items = [...items, {
         id: 'it_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
         category: prev.category || 'Apparel',
-        subCategory: prev.subCategory || 'Polo Shirt',
+        subCategory: prev.subCategory || (isNonApp ? 'Drinkwear' : 'Polo'),
         productName: prev.productName || '',
         colorName: prev.colorName || '',
         fabricName: prev.fabricName || '',
+        size: prev.size || (isNonApp ? '500ml' : ''),
         unitPrice: prev.unitPrice || 0,
         totalQty: 0, // NEVER COPY QUANTITIES: strictly 0
         clientEtd: prev.clientEtd || new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
         clientRemarks: prev.clientRemarks || '',
         productImageUrl: prev.productImageUrl || '',
+        brandLabel: prev.brandLabel || 'ETTU',
+        brandLabelDesc: prev.brandLabelDesc || '',
+        additionalLabels: clonedAdditionalLabels,
         mainLabel: prev.mainLabel || '',
         otherLabel: prev.otherLabel || '',
-        custPackaging: prev.custPackaging || '',
-        matrix: prev.category === 'Apparel' ? { Men: {}, Women: {} } : { General: {} },
+        custPackaging: prev.custPackaging || 'Poly-Carton',
+        matrix: isNonApp ? { General: {} } : { Men: {}, Women: {} },
         brandings: clonedBrandings,
         personalizations: [],
-        isLocked: false,
+        isLocked: true, // locked until quantity > 0
         isCollapsed: false
       }];
       if (window.showToast) {
@@ -188,6 +251,8 @@
       brandingFileUrl: b.brandingFileUrl || ''
     }));
 
+    const clonedAdditionalLabels = (src.additionalLabels || []).map(al => ({ ...al }));
+
     items[destIdx] = {
       ...dest,
       category: src.category,
@@ -195,13 +260,17 @@
       productName: src.productName,
       colorName: src.colorName,
       fabricName: src.fabricName,
+      size: src.size || dest.size,
       unitPrice: src.unitPrice,
+      brandLabel: src.brandLabel,
+      brandLabelDesc: src.brandLabelDesc,
+      additionalLabels: clonedAdditionalLabels,
       mainLabel: src.mainLabel,
       otherLabel: src.otherLabel,
       custPackaging: src.custPackaging,
       clientRemarks: src.clientRemarks,
       brandings: clonedBrandings,
-      // Keep existing destination quantities or reset to 0 if not entered
+      // Preserve existing destination quantities
       totalQty: dest.totalQty || 0
     };
 
@@ -210,17 +279,93 @@
     }
   }
 
+  function onProductNameSelect(idx, val) {
+    const name = typeof val === 'object' ? (val.display_name || val.code || '') : String(val);
+    items[idx].productName = name;
+    if (!name) return;
+
+    // Connect and auto-fill related dependent properties across the Order Taking page
+    const prod = (masters.products || []).find(p =>
+      p.display_name?.toLowerCase() === name.toLowerCase() || p.code?.toLowerCase() === name.toLowerCase()
+    );
+
+    if (prod && prod.meta) {
+      const pCat = (prod.meta.category || '').replace('-', ' ').trim();
+      if (pCat) {
+        items[idx].category = pCat.toLowerCase() === 'non apparel' ? 'Non Apparel' : 'Apparel';
+      }
+      const pSub = prod.meta.subcategory || prod.meta.subCategory;
+      if (pSub) {
+        items[idx].subCategory = pSub;
+      }
+      if (prod.meta.basePrice && !items[idx].unitPrice) {
+        items[idx].unitPrice = prod.meta.basePrice;
+      }
+    }
+
+    // Auto-detect size for Non-Apparel
+    if (items[idx].category === 'Non Apparel') {
+      const lower = name.toLowerCase();
+      if (lower.includes('1000 ml') || lower.includes('1000ml')) items[idx].size = '1000 ml';
+      else if (lower.includes('1200 ml') || lower.includes('1200ml')) items[idx].size = '1.5 Litre';
+      else if (lower.includes('750 ml') || lower.includes('750ml')) items[idx].size = '750ml';
+      else if (lower.includes('650 ml') || lower.includes('650ml')) items[idx].size = '650ml';
+      else if (lower.includes('500 ml') || lower.includes('500ml')) items[idx].size = '500ml';
+      else if (lower.includes('450 ml') || lower.includes('450ml')) items[idx].size = '500ml';
+      else if (lower.includes('350 ml') || lower.includes('350ml')) items[idx].size = '300ml';
+      else if (lower.includes('15.6')) items[idx].size = '15.6 Inch';
+      else if (lower.includes('15 inch') || lower.includes('15-inch')) items[idx].size = '15 Inch';
+      else if (lower.includes('10.5')) items[idx].size = '10.5 Inch';
+      else if (!items[idx].size) items[idx].size = getNonApparelSizes(items[idx].subCategory)[0] || 'Std';
+
+      items[idx].isLocked = (parseInt(items[idx].totalQty, 10) || 0) <= 0;
+    } else {
+      // Auto-suggest fabric for Apparel based on product name / genre
+      if (!items[idx].fabricName) {
+        const lower = name.toLowerCase();
+        if (lower.includes('polo')) items[idx].fabricName = 'Pique';
+        else if (lower.includes('hoodie') || lower.includes('jacket')) items[idx].fabricName = 'Classic Fleece';
+        else if (lower.includes('tee') || lower.includes('t-shirt')) items[idx].fabricName = 'Sinker';
+        else if (lower.includes('pant') || lower.includes('jogger')) items[idx].fabricName = 'Looperknit';
+      }
+    }
+  }
+
+  function onCategoryChange(idx, newCat) {
+    items[idx].category = newCat;
+    if (newCat === 'Non Apparel') {
+      items[idx].subCategory = 'Drinkwear';
+      items[idx].size = '500ml';
+      items[idx].fabricName = '';
+      items[idx].isLocked = (parseInt(items[idx].totalQty, 10) || 0) <= 0;
+    } else {
+      items[idx].subCategory = 'Polo';
+      items[idx].size = '';
+      items[idx].fabricName = items[idx].fabricName || 'Pique';
+      items[idx].isLocked = true;
+    }
+  }
+
   function onSubCategoryChange(idx, newSubCategory) {
     items[idx].subCategory = newSubCategory;
-    // Check if any previous item matches this subCategory
+    if (items[idx].category === 'Non Apparel') {
+      const sizes = getNonApparelSizes(newSubCategory);
+      if (!sizes.includes(items[idx].size)) {
+        items[idx].size = sizes[0] || 'Std';
+      }
+    }
+
+    // Check if any previous item matches this subCategory to auto-copy common properties
     const matchingPrev = items.find((it, i) => i !== idx && it.subCategory === newSubCategory);
     if (matchingPrev) {
-      // Auto-copy properties from matching item
       if (!items[idx].fabricName && matchingPrev.fabricName) items[idx].fabricName = matchingPrev.fabricName;
       if (!items[idx].unitPrice && matchingPrev.unitPrice) items[idx].unitPrice = matchingPrev.unitPrice;
-      if (!items[idx].mainLabel && matchingPrev.mainLabel) items[idx].mainLabel = matchingPrev.mainLabel;
-      if (!items[idx].otherLabel && matchingPrev.otherLabel) items[idx].otherLabel = matchingPrev.otherLabel;
+      if (!items[idx].brandLabel && matchingPrev.brandLabel) items[idx].brandLabel = matchingPrev.brandLabel;
+      if (!items[idx].brandLabelDesc && matchingPrev.brandLabelDesc) items[idx].brandLabelDesc = matchingPrev.brandLabelDesc;
       if (!items[idx].custPackaging && matchingPrev.custPackaging) items[idx].custPackaging = matchingPrev.custPackaging;
+      if ((!items[idx].additionalLabels || items[idx].additionalLabels.length === 0) && matchingPrev.additionalLabels?.length > 0) {
+        items[idx].additionalLabels = matchingPrev.additionalLabels.map(al => ({ ...al }));
+      }
       if (items[idx].brandings.length === 0 && matchingPrev.brandings.length > 0) {
         items[idx].brandings = matchingPrev.brandings.map(b => ({
           ...b,
@@ -228,6 +373,23 @@
         }));
       }
     }
+  }
+
+  function toggleAdditionalLabel(idx, labelType) {
+    if (!items[idx].additionalLabels) items[idx].additionalLabels = [];
+    const existingIdx = items[idx].additionalLabels.findIndex(al => al.labelType === labelType);
+    if (existingIdx >= 0) {
+      items[idx].additionalLabels = items[idx].additionalLabels.filter((_, i) => i !== existingIdx);
+    } else {
+      items[idx].additionalLabels = [
+        ...items[idx].additionalLabels,
+        { labelType, description: '', genre: 'Woven' }
+      ];
+    }
+  }
+
+  function removeAdditionalLabel(idx, alIdx) {
+    items[idx].additionalLabels = items[idx].additionalLabels.filter((_, i) => i !== alIdx);
   }
 
   function removeProductItem(idx) {
@@ -351,14 +513,23 @@
   });
 
   // Authoritative Hard Lock Check: Any unbalanced item locks the entire order!
+  // Note: Non-Apparel items are excluded from Matrix Math Checker
   let lockedItemInfo = $derived.by(() => {
     for (let i = 0; i < items.length; i++) {
       const it = items[i];
-      if (it.isLocked || (parseInt(it.totalQty, 10) || 0) <= 0) {
-        return { isLocked: true, index: i + 1, productName: it.productName || 'Item #' + (i + 1) };
+      const qty = parseInt(it.totalQty, 10) || 0;
+      if (qty <= 0) {
+        return { isLocked: true, index: i + 1, productName: it.productName || 'Item #' + (i + 1), reason: 'Quantity must be greater than 0' };
+      }
+      if (!it.productName || !it.productName.trim()) {
+        return { isLocked: true, index: i + 1, productName: 'Item #' + (i + 1), reason: 'Product Name is required' };
+      }
+      const isNonApp = it.category === 'Non Apparel' || it.category === 'Non-Apparel';
+      if (!isNonApp && it.isLocked) {
+        return { isLocked: true, index: i + 1, productName: it.productName, reason: 'Gender-Size Matrix sum does not match target total quantity' };
       }
     }
-    return { isLocked: false, index: -1, productName: '' };
+    return { isLocked: false, index: -1, productName: '', reason: '' };
   });
 
   let isMathLocked = $derived(lockedItemInfo.isLocked);
@@ -373,7 +544,7 @@
 
     if (isMathLocked) {
       if (window.showToast) {
-        window.showToast(`MATH LOCK: Item #${lockedItemInfo.index} (${lockedItemInfo.productName}) has an unbalanced matrix. Balance all product quantities to proceed.`, 'error');
+        window.showToast(`LOCK VIOLATION: Item #${lockedItemInfo.index} (${lockedItemInfo.productName}) - ${lockedItemInfo.reason}.`, 'error');
       }
       return;
     }
@@ -404,26 +575,44 @@
         freightCost,
         clientComment: overallClientComment,
         targetEtd: items[0]?.clientEtd || '',
-        items: items.map((it, idx) => ({
-          id: it.id,
-          itemSequence: idx + 1,
-          category: it.category,
-          subCategory: it.subCategory,
-          productName: it.productName,
-          colorName: it.colorName,
-          fabricName: it.fabricName,
-          unitPrice: parseFloat(it.unitPrice) || 0.0,
-          totalQty: parseInt(it.totalQty, 10) || 0,
-          clientEtd: it.clientEtd,
-          clientRemarks: it.clientRemarks,
-          productImageUrl: it.productImageUrl,
-          mainLabel: it.mainLabel,
-          otherLabel: it.otherLabel,
-          custPackaging: it.custPackaging,
-          matrix: it.matrix,
-          brandings: it.brandings || [],
-          personalizations: it.personalizations || []
-        })),
+        items: items.map((it, idx) => {
+          const isNonApp = it.category === 'Non Apparel' || it.category === 'Non-Apparel';
+          const mainLbl = it.brandLabel
+            ? (it.brandLabelDesc ? `${it.brandLabel} (${it.brandLabelDesc})` : it.brandLabel)
+            : (it.mainLabel || '');
+          const otherLbl = (it.additionalLabels && it.additionalLabels.length > 0)
+            ? it.additionalLabels.map(al => al.description ? `${al.labelType}: ${al.description}` : al.labelType).join('; ')
+            : (it.otherLabel || '');
+
+          const computedMatrix = isNonApp
+            ? { General: { [it.size || 'Std']: parseInt(it.totalQty, 10) || 0 } }
+            : it.matrix;
+
+          return {
+            id: it.id,
+            itemSequence: idx + 1,
+            category: isNonApp ? 'Non Apparel' : 'Apparel',
+            subCategory: it.subCategory,
+            productName: it.productName,
+            colorName: it.colorName,
+            fabricName: isNonApp ? '' : it.fabricName,
+            size: it.size || '',
+            unitPrice: parseFloat(it.unitPrice) || 0.0,
+            totalQty: parseInt(it.totalQty, 10) || 0,
+            clientEtd: it.clientEtd,
+            clientRemarks: it.clientRemarks,
+            productImageUrl: it.productImageUrl,
+            brandLabel: it.brandLabel || '',
+            brandLabelDesc: it.brandLabelDesc || '',
+            additionalLabels: it.additionalLabels || [],
+            mainLabel: mainLbl,
+            otherLabel: otherLbl,
+            custPackaging: it.custPackaging || 'Poly-Carton',
+            matrix: computedMatrix,
+            brandings: it.brandings || [],
+            personalizations: it.personalizations || []
+          };
+        }),
         multipleShipping: isMultiShipping,
         shippingLocations: isMultiShipping ? shippingLocations : []
       };
@@ -790,53 +979,43 @@
                     <select
                       id="item-cat-{item.id}"
                       class="select-control"
-                      bind:value={item.category}
-                      onchange={() => {
-                        // Switch default subcategory on category toggle
-                        if (item.category === 'Non-Apparel') {
-                          onSubCategoryChange(idx, 'Drinkware / Sippers');
-                        } else {
-                          onSubCategoryChange(idx, 'Polo Shirt');
-                        }
-                      }}
+                      value={item.category}
+                      onchange={(e) => onCategoryChange(idx, e.target.value)}
                     >
                       <option value="Apparel">Apparel</option>
-                      <option value="Non-Apparel">Non-Apparel</option>
+                      <option value="Non Apparel">Non Apparel</option>
                     </select>
                   </div>
 
-                  <!-- Sub-Category -->
+                  <!-- Sub-Category / Genre -->
                   <div class="form-group">
-                    <label for="item-subcat-{item.id}">Sub-Category</label>
+                    <label for="item-subcat-{item.id}">Product Genre / Sub-Category</label>
                     <Combobox
                       id="item-subcat-{item.id}"
-                      items={item.category === 'Apparel' ? apparelSubCategories : nonApparelSubCategories}
-                      category="subcategory"
-                      displayKey="display_name"
-                      valueKey="display_name"
+                      items={item.category === 'Non Apparel' ? nonApparelGenres : apparelGenres}
                       bind:value={item.subCategory}
-                      placeholder="Select or add sub-category..."
-                      onSelect={(val) => onSubCategoryChange(idx, val?.display_name || val)}
+                      placeholder="Select genre (Polo, Jacket, Drinkwear...)"
+                      onSelect={(val) => onSubCategoryChange(idx, typeof val === 'object' ? (val.display_name || val.value) : val)}
                     />
                   </div>
 
-                  <!-- Product Name -->
+                  <!-- Product Name (Connected to Genre & Category) -->
                   <div class="form-group">
                     <label for="item-pname-{item.id}">Product Name</label>
                     <Combobox
                       id="item-pname-{item.id}"
-                      items={masters.products || []}
-                      category="product"
+                      items={getFilteredProductsFor(item)}
                       displayKey="display_name"
                       valueKey="display_name"
                       bind:value={item.productName}
-                      placeholder="Search product master..."
+                      placeholder="Search or enter product..."
+                      onSelect={(val) => onProductNameSelect(idx, val)}
                     />
                   </div>
 
-                  <!-- Color Combobox (289+ Master Colors) -->
+                  <!-- Color Combobox (477+ Master Colors from Excel) -->
                   <div class="form-group">
-                    <label for="item-col-{item.id}">Color Name (289+ Master Colors)</label>
+                    <label for="item-col-{item.id}">Color Name (477+ Master Colors)</label>
                     <Combobox
                       id="item-col-{item.id}"
                       items={masters.colors || []}
@@ -848,10 +1027,10 @@
                     />
                   </div>
 
-                  <!-- Fabric Name (for Apparel) -->
+                  <!-- Fabric Name (Only for Apparel) -->
                   {#if item.category === 'Apparel'}
                     <div class="form-group">
-                      <label for="item-fab-{item.id}">Fabric Composition (176+ Master Fabrics)</label>
+                      <label for="item-fab-{item.id}">Fabric Composition (187+ Master Fabrics)</label>
                       <Combobox
                         id="item-fab-{item.id}"
                         items={masters.fabrics || []}
@@ -891,7 +1070,7 @@
                   <!-- Target Total Quantity -->
                   <div class="form-group">
                     <label for="item-target-qty-{item.id}">
-                      Total Quantity (Pcs) <span class="math-req">*Authoritative Math Checked</span>
+                      Total Quantity (Pcs) {#if item.category === 'Apparel'}<span class="math-req">*Authoritative Math Checked</span>{:else}<span class="math-req">*Line Quantity</span>{/if}
                     </label>
                     <input
                       id="item-target-qty-{item.id}"
@@ -899,6 +1078,11 @@
                       min="1"
                       class="input-control numeric font-mono font-bold"
                       bind:value={item.totalQty}
+                      oninput={() => {
+                        if (item.category === 'Non Apparel') {
+                          item.isLocked = (parseInt(item.totalQty, 10) || 0) <= 0;
+                        }
+                      }}
                     />
                   </div>
 
@@ -923,17 +1107,57 @@
                   </div>
                 </div>
 
-                <!-- GENDER-SIZE-QTY MATRIX WITH REAL-TIME MATH CHECKER -->
-                <div class="matrix-section-wrap">
-                  <GenderSizeMatrix
-                    category={item.category}
-                    subCategory={item.subCategory}
-                    bind:totalQty={item.totalQty}
-                    bind:matrix={item.matrix}
-                    unitPrice={item.unitPrice}
-                    bind:isLocked={item.isLocked}
-                  />
-                </div>
+                <!-- APPAREL VS NON-APPAREL SIZING CONFIGURATION -->
+                {#if item.category === 'Apparel'}
+                  <!-- GENDER-SIZE-QTY MATRIX WITH REAL-TIME MATH CHECKER (APPAREL ONLY) -->
+                  <div class="matrix-section-wrap">
+                    <GenderSizeMatrix
+                      category={item.category}
+                      subCategory={item.subCategory}
+                      bind:totalQty={item.totalQty}
+                      bind:matrix={item.matrix}
+                      unitPrice={item.unitPrice}
+                      bind:isLocked={item.isLocked}
+                    />
+                  </div>
+                {:else}
+                  <!-- NON-APPAREL SINGLE SIZE & QUANTITY (NO GENDER, NO MATRIX MATH CHECKER) -->
+                  <div class="non-apparel-size-wrap">
+                    <div class="non-apparel-header">
+                      <div class="na-title-group">
+                        <span class="na-badge">📦 Non-Apparel Single Size Config</span>
+                        <span class="na-tip">No gender configuration. Each different size/spec in this category is added as a separate product line item.</span>
+                      </div>
+                    </div>
+
+                    <div class="non-apparel-controls-grid">
+                      <div class="form-group">
+                        <label for="item-na-size-{item.id}">Size / Capacity Specification <span class="req">*</span></label>
+                        <Combobox
+                          id="item-na-size-{item.id}"
+                          items={getNonApparelSizes(item.subCategory)}
+                          bind:value={item.size}
+                          placeholder="Select or enter size (e.g. 500ml, Std, 15 Inch)..."
+                        />
+                      </div>
+
+                      <div class="form-group">
+                        <label for="item-na-qty-{item.id}">Item Quantity (Pcs) <span class="req">*</span></label>
+                        <input
+                          id="item-na-qty-{item.id}"
+                          type="number"
+                          min="1"
+                          class="input-control numeric font-mono font-bold"
+                          placeholder="Enter piece count..."
+                          bind:value={item.totalQty}
+                          oninput={() => {
+                            item.isLocked = (parseInt(item.totalQty, 10) || 0) <= 0;
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                {/if}
 
                 <!-- BRANDING & EMBELLISHMENTS (MULTIPLE PER PRODUCT) -->
                 <div class="brandings-section-wrap">
@@ -941,34 +1165,95 @@
                 </div>
 
                 <!-- LABELS & PACKAGING -->
-                <div class="trims-packaging-grid">
-                  <div class="form-group">
-                    <label for="item-main-label-{item.id}">Main Label</label>
-                    <Combobox
-                      category="label"
-                      placeholder="Woven Satin / Heat Transfer..."
-                      bind:value={item.mainLabel}
-                      items={masters.labels || []}
-                    />
+                <div class="labels-packaging-card">
+                  <div class="labels-header">
+                    <span class="labels-title">🏷️ Product Labels & Embellished Trims</span>
+                    <span class="labels-sub">Brand Label with Description & Multi-Select Additional Labels</span>
                   </div>
 
-                  <div class="form-group">
-                    <label for="item-other-label-{item.id}">Other Labels (Care / Size / Flag)</label>
-                    <Combobox
-                      category="label"
-                      placeholder="Wash care label, size pip..."
-                      bind:value={item.otherLabel}
-                      items={masters.labels || []}
-                    />
+                  <div class="brand-label-grid">
+                    <div class="form-group">
+                      <label for="item-brand-label-{item.id}">Brand Label <span class="req">*</span></label>
+                      <Combobox
+                        id="item-brand-label-{item.id}"
+                        items={brandLabelList}
+                        bind:value={item.brandLabel}
+                        placeholder="Select Brand Label (ETTU, Jeep, OMG, Illa...)"
+                      />
+                    </div>
+
+                    <div class="form-group">
+                      <label for="item-brand-desc-{item.id}">Brand Label Description / Tech Specs</label>
+                      <Combobox
+                        id="item-brand-desc-{item.id}"
+                        items={labelDescriptionsList}
+                        bind:value={item.brandLabelDesc}
+                        placeholder="Select description or enter custom..."
+                      />
+                    </div>
                   </div>
 
-                  <div class="form-group">
-                    <label for="item-pkg-{item.id}">Customer Packaging Specs</label>
+                  <!-- Additional Labels Multi-Select Chips -->
+                  <div class="additional-labels-wrap">
+                    <label class="additional-labels-label">Additional Labels (Multi-Select):</label>
+                    <div class="additional-labels-chips">
+                      {#each additionalLabelTypes as aType}
+                        {@const isSelected = (item.additionalLabels || []).some(al => al.labelType === aType)}
+                        <button
+                          type="button"
+                          class="label-chip {isSelected ? 'selected' : ''}"
+                          onclick={() => toggleAdditionalLabel(idx, aType)}
+                        >
+                          {isSelected ? '✓ ' : '+ '}{aType}
+                        </button>
+                      {/each}
+                    </div>
+                  </div>
+
+                  <!-- Additional Labels Configured Rows with Descriptions -->
+                  {#if item.additionalLabels && item.additionalLabels.length > 0}
+                    <div class="additional-labels-table-wrap">
+                      {#each item.additionalLabels as al, alIdx}
+                        <div class="additional-label-entry">
+                          <span class="al-type-tag">🏷️ {al.labelType}</span>
+
+                          <div class="al-genre-select">
+                            <select class="select-control compact" bind:value={al.genre}>
+                              {#each labelGenres as lg}
+                                <option value={lg}>{lg}</option>
+                              {/each}
+                            </select>
+                          </div>
+
+                          <div class="al-desc-input">
+                            <Combobox
+                              items={labelDescriptionsList}
+                              bind:value={al.description}
+                              placeholder={`Description for ${al.labelType}...`}
+                            />
+                          </div>
+
+                          <button
+                            type="button"
+                            class="al-del-btn"
+                            onclick={() => removeAdditionalLabel(idx, alIdx)}
+                            title="Remove label"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      {/each}
+                    </div>
+                  {/if}
+
+                  <!-- Customer Packaging Specs -->
+                  <div class="form-group" style="margin-top:16px;">
+                    <label for="item-pkg-{item.id}">Customer Packaging Specs <span class="req">*</span></label>
                     <Combobox
-                      category="cust_packaging"
-                      placeholder="Self adhesive polybag, barcode sticker..."
+                      id="item-pkg-{item.id}"
+                      items={custPackagingOptions}
+                      placeholder="Select customer packaging (Poly-Carton, Ettu box with sticker...)"
                       bind:value={item.custPackaging}
-                      items={masters.cust_packaging || []}
                     />
                   </div>
                 </div>
@@ -1482,6 +1767,206 @@
     border-color: #334155 !important;
     cursor: not-allowed;
     opacity: 0.6;
+  }
+
+  /* Non-Apparel Single Size Styling */
+  .non-apparel-size-wrap {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .non-apparel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .na-title-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .na-badge {
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    background: rgba(59, 130, 246, 0.15);
+    color: #60a5fa;
+    border: 1px solid rgba(59, 130, 246, 0.3);
+    padding: 3px 8px;
+    border-radius: 4px;
+  }
+
+  .na-tip {
+    font-size: 11.5px;
+    color: var(--text-muted);
+  }
+
+  .non-apparel-controls-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+  }
+
+  @media (max-width: 640px) {
+    .non-apparel-controls-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  /* Labels & Packaging Styling */
+  .labels-packaging-card {
+    background: var(--bg-input);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .labels-header {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    border-bottom: 1px solid var(--border-subtle);
+    padding-bottom: 8px;
+  }
+
+  .labels-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-main);
+  }
+
+  .labels-sub {
+    font-size: 11px;
+    color: var(--text-subtle);
+  }
+
+  .brand-label-grid {
+    display: grid;
+    grid-template-columns: 1fr 2fr;
+    gap: 14px;
+  }
+
+  @media (max-width: 640px) {
+    .brand-label-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .additional-labels-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .additional-labels-label {
+    font-size: 11.5px;
+    font-weight: 700;
+    color: var(--text-secondary);
+  }
+
+  .additional-labels-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .label-chip {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 9999px;
+    border: 1px solid var(--border-subtle);
+    background: var(--bg-surface);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .label-chip:hover {
+    border-color: var(--accent-primary);
+    color: var(--text-main);
+  }
+
+  .label-chip.selected {
+    background: var(--accent-primary);
+    border-color: var(--accent-primary);
+    color: #fff;
+    font-weight: 700;
+  }
+
+  .additional-labels-table-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    background: rgba(0, 0, 0, 0.15);
+    padding: 12px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-subtle);
+  }
+
+  .additional-label-entry {
+    display: grid;
+    grid-template-columns: 140px 110px 1fr 32px;
+    gap: 10px;
+    align-items: center;
+  }
+
+  @media (max-width: 768px) {
+    .additional-label-entry {
+      grid-template-columns: 1fr;
+      gap: 6px;
+    }
+  }
+
+  .al-type-tag {
+    font-size: 11.5px;
+    font-weight: 700;
+    color: var(--text-main);
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    padding: 4px 8px;
+    border-radius: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .al-genre-select {
+    width: 100%;
+  }
+
+  .al-desc-input {
+    width: 100%;
+  }
+
+  .al-del-btn {
+    background: transparent;
+    border: 1px solid rgba(244, 63, 94, 0.3);
+    color: var(--accent-rose);
+    border-radius: 4px;
+    height: 32px;
+    width: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+
+  .al-del-btn:hover {
+    background: rgba(244, 63, 94, 0.15);
   }
 
   .spinner-sm {

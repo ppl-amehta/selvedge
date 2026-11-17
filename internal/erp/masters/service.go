@@ -76,12 +76,13 @@ func (s *Service) GetAllMasters() (map[string]any, error) {
 		"zip_closure":      make([]MasterItem, 0),
 		"zip_finish":       make([]MasterItem, 0),
 		"trim_type":        make([]MasterItem, 0),
-		"label_brand":      make([]MasterItem, 0),
-		"label_additional": make([]MasterItem, 0),
-		"label_genre":      make([]MasterItem, 0),
-		"washcare":         make([]MasterItem, 0),
-		"packaging_type":   make([]MasterItem, 0),
-		"packaging_size":   make([]MasterItem, 0),
+		"label_brand":       make([]MasterItem, 0),
+		"label_additional":  make([]MasterItem, 0),
+		"label_genre":       make([]MasterItem, 0),
+		"label_description": make([]MasterItem, 0),
+		"washcare":          make([]MasterItem, 0),
+		"packaging_type":    make([]MasterItem, 0),
+		"packaging_size":    make([]MasterItem, 0),
 	}
 
 	rows, err := s.db.Query("SELECT id, category, code, display_name, coalesce(meta_json, '{}') FROM master_items ORDER BY display_name")
@@ -137,6 +138,7 @@ func (s *Service) GetAllMasters() (map[string]any, error) {
 		"label_brands":       categoriesMap["label_brand"],
 		"label_additionals":  categoriesMap["label_additional"],
 		"label_genres":       categoriesMap["label_genre"],
+		"label_descriptions": categoriesMap["label_description"],
 		"washcare":           categoriesMap["washcare"],
 		"packaging_types":    categoriesMap["packaging_type"],
 		"packaging_sizes":    categoriesMap["packaging_size"],

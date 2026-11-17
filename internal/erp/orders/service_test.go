@@ -2,6 +2,7 @@ package orders_test
 
 import (
 	"os"
+	"strings"
 	"testing"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -310,4 +311,54 @@ func TestZohoProgrammaticFetch(t *testing.T) {
 		t.Errorf("Expected line items in Zoho response, got 0")
 	}
 	t.Logf("✓ Zoho programmatic pull returned client %q with %d items", zohoRes.ClientName, len(zohoRes.Items))
+}
+
+func TestSuggestNextOrderNo_FormatMMYY0000(t *testing.T) {
+	database, svc, _ := setupTestDB(t)
+	defer database.Close()
+	defer os.Remove("/tmp/test_selvedge_orders.db")
+
+	no1, err := svc.SuggestNextOrderNo()
+	if err != nil {
+		t.Fatalf("SuggestNextOrderNo failed: %v", err)
+	}
+
+	// Should be 8 characters: 4 prefix + 4 digits
+	if len(no1) != 8 {
+		t.Fatalf("Expected 8 characters format MMYY0000, got %q (len %d)", no1, len(no1))
+	}
+	if !strings.HasSuffix(no1, "0001") {
+		t.Fatalf("Expected first order number to end in 0001, got %q", no1)
+	}
+	t.Logf("✓ Verified auto-increment initial format: %s", no1)
+
+	// Insert order with no1
+	payload := orders.CreateOrderPayload{
+		OrderNo:    no1,
+		ClientName: "Test Client Ltd",
+		Items: []orders.OrderItemPayload{
+			{
+				Category:    "Non Apparel",
+				SubCategory: "Drinkwear",
+				ProductName: "Ember Steel Mug 650ml",
+				Size:        "650ml",
+				UnitPrice:   650,
+				TotalQty:    10,
+			},
+		},
+	}
+	_, err = svc.CreateOrder(payload)
+	if err != nil {
+		t.Fatalf("Failed to create order %s: %v", no1, err)
+	}
+
+	// Now next order should be 0002
+	no2, err := svc.SuggestNextOrderNo()
+	if err != nil {
+		t.Fatalf("Second SuggestNextOrderNo failed: %v", err)
+	}
+	if !strings.HasSuffix(no2, "0002") {
+		t.Fatalf("Expected second order number to end in 0002, got %q", no2)
+	}
+	t.Logf("✓ Verified auto-increment second format: %s", no2)
 }

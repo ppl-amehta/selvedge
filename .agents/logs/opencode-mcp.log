@@ -28,3 +28,5 @@
 [2026-11-16T16:50:56.859Z] TOOL=opencode_code_review MODEL=mimo-v2.6-flash DURATION=120043ms STATUS=ERROR REVIEW_TARGET="diff --git a/web/jsconfig.json b/web/jsconfig.json
 --- a/web/jsconfig.json
 +++ b" FOCUS="frontend build tooling, Vite 8 rolldownOptions, and TypeScript native checkJs configuration" SKILLS=""
+[2026-11-17T12:10:37.901Z] TOOL=opencode_code_review MODEL=glm-5.3-flash DURATION=79905ms STATUS=SUCCESS REVIEW_TARGET="internal/erp/orders/service.go" FOCUS="correctness and MMYY0000 order sequence generation, non-apparel single-size logic, and label structures" SKILLS=""
+[2026-11-17T12:14:35.416Z] TOOL=opencode_code_review MODEL=glm-5.3-flash DURATION=79609ms STATUS=SUCCESS REVIEW_TARGET="internal/erp/orders/service.go" FOCUS="final verification of MMYY0000 generation, non-apparel single size matrix, connected dropdowns, and label composition" SKILLS=""

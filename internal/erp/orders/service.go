@@ -83,6 +83,12 @@ type CreateOrderPayload struct {
 	CustPackaging   string                   `json:"custPackaging"`
 }
 
+type LabelDetailPayload struct {
+	LabelType   string `json:"labelType"`
+	Description string `json:"description"`
+	Genre       string `json:"genre,omitempty"`
+}
+
 type OrderItemPayload struct {
 	ID               string                   `json:"id"`
 	ItemSequence     int                      `json:"itemSequence"`
@@ -91,6 +97,7 @@ type OrderItemPayload struct {
 	ProductName      string                   `json:"productName"`
 	ColorName        string                   `json:"colorName"`
 	FabricName       string                   `json:"fabricName"`
+	Size             string                   `json:"size,omitempty"`
 	UnitPrice        float64                  `json:"unitPrice"`
 	TotalQty         int                      `json:"totalQty"`
 	ClientEtd        string                   `json:"clientEtd"`
@@ -98,6 +105,9 @@ type OrderItemPayload struct {
 	ProductImageUrl  string                   `json:"productImageUrl"`
 	MainLabel        string                   `json:"mainLabel"`
 	OtherLabel       string                   `json:"otherLabel"`
+	BrandLabel       string                   `json:"brandLabel,omitempty"`
+	BrandLabelDesc   string                   `json:"brandLabelDesc,omitempty"`
+	AdditionalLabels []LabelDetailPayload     `json:"additionalLabels,omitempty"`
 	CustPackaging    string                   `json:"custPackaging"`
 	Matrix           any                      `json:"matrix"`
 	Brandings        []BrandingPayload        `json:"brandings"`
@@ -136,43 +146,34 @@ type ShippingDestPayload struct {
 	TargetEtd          string `json:"targetEtd"`
 }
 
-// SuggestNextOrderNo generates format: S{YYMMDD}{A..Z}
+// SuggestNextOrderNo generates format: MMYY0000 (e.g. 11260001 for November 2026)
 func (s *Service) SuggestNextOrderNo() (string, error) {
 	now := time.Now()
-	prefix := fmt.Sprintf("S%s", now.Format("060102"))
+	prefix := now.Format("0106") // MM = 01, YY = 06 -> e.g. "1126" in Nov 2026
 
 	var lastOrderNo string
+	// Filter with GLOB 'MMYY[0-9][0-9][0-9][0-9]' so non-numeric suffixes are ignored
+	pattern := fmt.Sprintf("%s[0-9][0-9][0-9][0-9]", prefix)
 	err := s.db.QueryRow(`
 		SELECT production_order_no FROM orders
-		WHERE production_order_no LIKE ?
+		WHERE production_order_no GLOB ?
 		ORDER BY production_order_no DESC LIMIT 1
-	`, prefix+"%").Scan(&lastOrderNo)
+	`, pattern).Scan(&lastOrderNo)
 
-	if errors.Is(err, sql.ErrNoRows) {
-		return prefix + "A", nil
-	} else if err != nil {
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return "", fmt.Errorf("database query failed for next order no: %w", err)
+	}
+	if errors.Is(err, sql.ErrNoRows) || lastOrderNo == "" {
+		return fmt.Sprintf("%s0001", prefix), nil
 	}
 
 	suffix := strings.TrimPrefix(lastOrderNo, prefix)
-	if len(suffix) == 0 {
-		return prefix + "A", nil
+	var seq int
+	if n, err := fmt.Sscanf(suffix, "%d", &seq); err == nil && n == 1 && seq > 0 {
+		return fmt.Sprintf("%s%04d", prefix, seq+1), nil
 	}
 
-	nextSuffix := incrementSuffix(suffix)
-	return prefix + nextSuffix, nil
-}
-
-func incrementSuffix(s string) string {
-	b := []byte(s)
-	for i := len(b) - 1; i >= 0; i-- {
-		if b[i] < 'Z' {
-			b[i]++
-			return string(b)
-		}
-		b[i] = 'A'
-	}
-	return "A" + string(b)
+	return fmt.Sprintf("%s0001", prefix), nil
 }
 
 // computeMatrixSum recursively traverses map[string]any or map[string]int to calculate sum
@@ -182,6 +183,15 @@ func computeMatrixSum(matrix any) (int, error) {
 	}
 	total := 0
 	switch m := matrix.(type) {
+	case json.Number:
+		n, err := m.Int64()
+		if err != nil {
+			return 0, fmt.Errorf("invalid json number %v: %w", m, err)
+		}
+		if n < 0 {
+			return 0, fmt.Errorf("negative quantity not allowed: %d", n)
+		}
+		return int(n), nil
 	case map[string]int:
 		for _, v := range m {
 			if v < 0 {
@@ -197,16 +207,22 @@ func computeMatrixSum(matrix any) (int, error) {
 			total += int(v)
 		}
 	case map[string]any:
-		for _, v := range m {
+		for k, v := range m {
 			switch val := v.(type) {
+			case json.Number:
+				n, err := val.Int64()
+				if err != nil || n < 0 {
+					return 0, fmt.Errorf("invalid or negative quantity at key %q: %v", k, val)
+				}
+				total += int(n)
 			case float64:
 				if val < 0 || float64(int(val)) != val {
-					return 0, fmt.Errorf("fractional or negative quantity not allowed: %v", val)
+					return 0, fmt.Errorf("fractional or negative quantity at key %q: %v", k, val)
 				}
 				total += int(val)
 			case int:
 				if val < 0 {
-					return 0, fmt.Errorf("negative quantity not allowed: %d", val)
+					return 0, fmt.Errorf("negative quantity not allowed at key %q: %d", k, val)
 				}
 				total += val
 			case map[string]any:
@@ -215,8 +231,14 @@ func computeMatrixSum(matrix any) (int, error) {
 					return 0, err
 				}
 				total += sub
+			case nil:
+				// ignore nil entries
+			default:
+				return 0, fmt.Errorf("unsupported matrix value type %T at key %q", val, k)
 			}
 		}
+	default:
+		return 0, fmt.Errorf("unsupported matrix structure: %T", matrix)
 	}
 	return total, nil
 }
@@ -279,9 +301,16 @@ func (s *Service) CreateOrder(p CreateOrderPayload) (map[string]any, error) {
 		}
 		var legacyBrandings []BrandingPayload
 		if p.BrandingType != "" {
+			bType := strings.ToLower(strings.TrimSpace(p.BrandingType))
+			switch bType {
+			case "emb", "print", "dtf", "unik":
+				// valid
+			default:
+				bType = "other"
+			}
 			legacyBrandings = append(legacyBrandings, BrandingPayload{
 				ID:              fmt.Sprintf("bnd_%d_%d", nowMs, rand.Intn(10000)),
-				BrandingType:    "emb",
+				BrandingType:    bType,
 				Placement:       p.BrandingType,
 				BrandingFileURL: p.BrandingFileUrl,
 			})
@@ -323,14 +352,71 @@ func (s *Service) CreateOrder(p CreateOrderPayload) (map[string]any, error) {
 			return nil, fmt.Errorf("item #%d (%s) total quantity must be greater than 0", i+1, item.ProductName)
 		}
 
-		// Math Checker: Matrix sum must strictly equal TotalQty
-		matrixSum, err := computeMatrixSum(item.Matrix)
-		if err != nil {
-			return nil, fmt.Errorf("item #%d (%s) matrix error: %w", i+1, item.ProductName, err)
+		// Category discrimination for Non-Apparel
+		isNonApparel := strings.EqualFold(strings.TrimSpace(item.Category), "Non Apparel") ||
+			strings.EqualFold(strings.TrimSpace(item.Category), "Non-Apparel")
+
+		// If Non-Apparel and single size is provided without a matrix, initialize single-size matrix
+		if isNonApparel {
+			mSum, err := computeMatrixSum(items[i].Matrix)
+			if err != nil {
+				return nil, fmt.Errorf("non-apparel item #%d (%s) matrix error: %w", i+1, item.ProductName, err)
+			}
+			if items[i].Size != "" && (items[i].Matrix == nil || mSum == 0) {
+				items[i].Matrix = map[string]any{
+					"General": map[string]any{
+						items[i].Size: item.TotalQty,
+					},
+				}
+			} else if mSum > 0 && mSum != item.TotalQty {
+				return nil, fmt.Errorf("math checker violation on non-apparel item #%d (%s): matrix sum (%d) does not match total quantity (%d). action locked",
+					i+1, item.ProductName, mSum, item.TotalQty)
+			}
+		} else {
+			// Math Checker: For Apparel, Matrix sum must strictly equal TotalQty
+			matrixSum, err := computeMatrixSum(item.Matrix)
+			if err != nil {
+				return nil, fmt.Errorf("item #%d (%s) matrix error: %w", i+1, item.ProductName, err)
+			}
+			if matrixSum > 0 && matrixSum != item.TotalQty {
+				return nil, fmt.Errorf("math checker violation on item #%d (%s): matrix sum (%d) does not match total quantity (%d). action locked",
+					i+1, item.ProductName, matrixSum, item.TotalQty)
+			}
 		}
-		if matrixSum > 0 && matrixSum != item.TotalQty {
-			return nil, fmt.Errorf("math checker violation on item #%d (%s): matrix sum (%d) does not match total quantity (%d). action locked",
-				i+1, item.ProductName, matrixSum, item.TotalQty)
+
+		// Compose Brand Label and Additional Labels into mainLabel/otherLabel if provided
+		if item.BrandLabel != "" {
+			brandStr := item.BrandLabel
+			if item.BrandLabelDesc != "" {
+				brandStr = fmt.Sprintf("%s (%s)", item.BrandLabel, item.BrandLabelDesc)
+			}
+			if items[i].MainLabel != "" && items[i].MainLabel != item.BrandLabel {
+				items[i].MainLabel = fmt.Sprintf("%s; %s", items[i].MainLabel, brandStr)
+			} else {
+				items[i].MainLabel = brandStr
+			}
+		}
+		if len(item.AdditionalLabels) > 0 {
+			var labelSummaries []string
+			for _, al := range item.AdditionalLabels {
+				labelType := strings.TrimSpace(al.LabelType)
+				if labelType != "" {
+					desc := strings.TrimSpace(al.Description)
+					genre := strings.TrimSpace(al.Genre)
+					detail := labelType
+					if genre != "" && desc != "" {
+						detail = fmt.Sprintf("%s [%s]: %s", labelType, genre, desc)
+					} else if desc != "" {
+						detail = fmt.Sprintf("%s: %s", labelType, desc)
+					} else if genre != "" {
+						detail = fmt.Sprintf("%s [%s]", labelType, genre)
+					}
+					labelSummaries = append(labelSummaries, detail)
+				}
+			}
+			if len(labelSummaries) > 0 {
+				items[i].OtherLabel = strings.Join(labelSummaries, "; ")
+			}
 		}
 
 		// Personalization rules: Only 1 alphabetical Name and 1 numerical Number
