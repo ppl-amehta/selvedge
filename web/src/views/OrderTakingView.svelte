@@ -413,11 +413,16 @@
   }
 
   function handleClientSelect(client) {
+    if (client.name) clientName = client.name;
     if (client.contact_person) contactPerson = client.contact_person;
     if (client.phone) phone = client.phone;
     if (client.email) email = client.email;
     if (client.gstin) gstin = client.gstin;
-    if (client.address) billingAddress = client.address;
+    if (client.billing_address) {
+      billingAddress = client.billing_address;
+    } else if (client.address) {
+      billingAddress = client.address;
+    }
   }
 
   // Handle Zoho Programmatic Order Application
@@ -766,8 +771,8 @@
             id="client-name-input"
             items={masters.clients || []}
             category="client"
-            displayKey="display_name"
-            valueKey="display_name"
+            displayKey="name"
+            valueKey="name"
             bind:value={clientName}
             placeholder="Search client or type new..."
             onSelect={handleClientSelect}

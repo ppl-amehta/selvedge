@@ -46,7 +46,8 @@
       const text = item.display_name.toLowerCase();
       const code = (item.code || '').toLowerCase();
       const val = item.value.toLowerCase();
-      return text.includes(q) || code.includes(q) || val.includes(q);
+      const gstin = (item.gstin || '').toLowerCase();
+      return text.includes(q) || code.includes(q) || val.includes(q) || gstin.includes(q);
     }).slice(0, 50);
   });
 
@@ -169,6 +170,8 @@
             <span>{item.display_name}</span>
             {#if item.code && item.code !== item.display_name}
               <span class="item-meta">{item.code}</span>
+            {:else if item.gstin}
+              <span class="item-meta">{item.gstin}</span>
             {/if}
           </div>
         {/each}

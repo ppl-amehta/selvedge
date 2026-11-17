@@ -24,7 +24,13 @@ func TestMasterCatalogConsolidation(t *testing.T) {
 	migrations := []string{
 		"../../../migrations/001_initial_graph.sql",
 		"../../../migrations/002_seed_masters.sql",
+		"../../../migrations/003_multi_product_orders.sql",
+		"../../../migrations/004_three_stage_inward_pipeline.sql",
+		"../../../migrations/005_order_prep_and_planning.sql",
+		"../../../migrations/006_floor_cutting_station.sql",
+		"../../../migrations/007_invoices_and_multi_fabric_lots.sql",
 		"../../../migrations/008_consolidate_master_dropdowns.sql",
+		"../../../migrations/009_clean_foundational_excel_truth.sql",
 	}
 	for _, mFile := range migrations {
 		content, err := os.ReadFile(mFile)

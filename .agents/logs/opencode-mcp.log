@@ -30,3 +30,4 @@
 +++ b" FOCUS="frontend build tooling, Vite 8 rolldownOptions, and TypeScript native checkJs configuration" SKILLS=""
 [2026-11-17T12:10:37.901Z] TOOL=opencode_code_review MODEL=glm-5.3-flash DURATION=79905ms STATUS=SUCCESS REVIEW_TARGET="internal/erp/orders/service.go" FOCUS="correctness and MMYY0000 order sequence generation, non-apparel single-size logic, and label structures" SKILLS=""
 [2026-11-17T12:14:35.416Z] TOOL=opencode_code_review MODEL=glm-5.3-flash DURATION=79609ms STATUS=SUCCESS REVIEW_TARGET="internal/erp/orders/service.go" FOCUS="final verification of MMYY0000 generation, non-apparel single size matrix, connected dropdowns, and label composition" SKILLS=""
+[2026-11-17T12:36:27.379Z] TOOL=opencode_code_review MODEL=glm-5.3-flash DURATION=120037ms STATUS=ERROR REVIEW_TARGET="migrations/009_clean_foundational_excel_truth.sql" FOCUS="correctness, data integrity, purging of dummy data" SKILLS=""

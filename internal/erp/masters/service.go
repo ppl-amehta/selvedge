@@ -19,14 +19,16 @@ func NewService(db *sql.DB, graphStore *graph.Store) *Service {
 }
 
 type Entity struct {
-	ID            string `json:"id"`
-	Name          string `json:"name"`
-	EntityType    string `json:"entity_type"`
-	ContactPerson string `json:"contact_person"`
-	Phone         string `json:"phone"`
-	Email         string `json:"email"`
-	Gstin         string `json:"gstin"`
-	Address       string `json:"address"`
+	ID              string `json:"id"`
+	Name            string `json:"name"`
+	EntityType      string `json:"entity_type"`
+	ContactPerson   string `json:"contact_person"`
+	Phone           string `json:"phone"`
+	Email           string `json:"email"`
+	Gstin           string `json:"gstin"`
+	Address         string `json:"address"`
+	BillingAddress  string `json:"billing_address"`
+	ShippingAddress string `json:"shipping_address"`
 }
 
 type MasterItem struct {
@@ -147,7 +149,7 @@ func (s *Service) GetAllMasters() (map[string]any, error) {
 }
 
 func (s *Service) listEntities(entityType string) ([]Entity, error) {
-	query := "SELECT id, name, entity_type, coalesce(contact_person, ''), coalesce(phone, ''), coalesce(email, ''), coalesce(gstin, ''), coalesce(address, '') FROM master_entities WHERE entity_type = ? OR entity_type = 'both' ORDER BY name"
+	query := "SELECT id, name, entity_type, coalesce(contact_person, ''), coalesce(phone, ''), coalesce(email, ''), coalesce(gstin, ''), coalesce(address, ''), coalesce(billing_address, ''), coalesce(shipping_address, '') FROM master_entities WHERE entity_type = ? OR entity_type = 'both' ORDER BY name"
 	rows, err := s.db.Query(query, entityType)
 	if err != nil {
 		return nil, err
@@ -157,7 +159,7 @@ func (s *Service) listEntities(entityType string) ([]Entity, error) {
 	list := make([]Entity, 0)
 	for rows.Next() {
 		var e Entity
-		if err := rows.Scan(&e.ID, &e.Name, &e.EntityType, &e.ContactPerson, &e.Phone, &e.Email, &e.Gstin, &e.Address); err != nil {
+		if err := rows.Scan(&e.ID, &e.Name, &e.EntityType, &e.ContactPerson, &e.Phone, &e.Email, &e.Gstin, &e.Address, &e.BillingAddress, &e.ShippingAddress); err != nil {
 			return nil, err
 		}
 		list = append(list, e)
@@ -243,11 +245,19 @@ func (s *Service) RegisterMaster(category, value string, meta map[string]any) (m
 		email, _ := meta["email"].(string)
 		gstin, _ := meta["gstin"].(string)
 		address, _ := meta["address"].(string)
+		billing, _ := meta["billingAddress"].(string)
+		if billing == "" {
+			billing = address
+		}
+		shipping, _ := meta["shippingAddress"].(string)
+		if shipping == "" {
+			shipping = address
+		}
 
 		_, err = s.db.Exec(`
-			INSERT INTO master_entities (id, name, entity_type, contact_person, phone, email, gstin, address, created_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-		`, id, cleanVal, cat, contact, phone, email, gstin, address, now)
+			INSERT INTO master_entities (id, name, entity_type, contact_person, phone, email, gstin, address, billing_address, shipping_address, created_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`, id, cleanVal, cat, contact, phone, email, gstin, address, billing, shipping, now)
 		if err != nil {
 			return nil, err
 		}
