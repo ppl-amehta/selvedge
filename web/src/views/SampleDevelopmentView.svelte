@@ -123,12 +123,21 @@
     Jr: ['Jr-XS', 'Jr-S', 'Jr-M', 'Jr-L', 'Jr Custom']
   };
 
-  function getSizesForGender(g) {
-    if (masters?.gender_sizes?.[g] && masters.gender_sizes[g].length > 0) {
-      return masters.gender_sizes[g];
-    }
-    return fallbackGenderSizes[g] || fallbackGenderSizes['Men'];
-  }
+  // Non-Apparel Authoritative Size / Capacity Taxonomy (Sheet 4 from Excel)
+  const nonApparelSizesMap = {
+    'Drinkwear': ['100ml', '150ml', '200ml', '250ml', '300ml', '500ml', '750ml', '1 Litre', '1.5 Litre', '2 Litre'],
+    'Headgear': ['Std', 'Kids', 'Large', 'Small'],
+    'Caps': ['Std', 'Kids', 'Large', 'Small'],
+    'Stationary': ['A4', 'A3', 'A5', 'A6', 'B5'],
+    'Stationery': ['A4', 'A3', 'A5', 'A6', 'B5'],
+    'Bags': ['15 Inch', '15.6 Inch', '10.5 Inch', 'Std'],
+    'Electronics': ['Std'],
+    'Others': ['Std']
+  };
+
+  const bottomwearGenres = ['Bottoms', 'Shorts', 'Sweat Pants', 'Tights', 'Skorts'];
+  const zipIntensiveGenres = ['Jackets', 'Quarter zip', 'Hoodies and Pullovers', 'Sweater', 'Bottoms'];
+  const buttonIntensiveGenres = ['Polo', 'Shirt'];
 
   let apparelGenres = $derived(
     (masters.apparel_genres && masters.apparel_genres.length > 0)
@@ -145,6 +154,231 @@
       ? masters.non_apparel_genres
       : ['Drinkwear', 'Headgear', 'Bags', 'Stationary', 'Electronics', 'Others']
   );
+
+  let isNonApparel = $derived(nonApparelGenres.includes(productGenre));
+  let isBottomwear = $derived(bottomwearGenres.includes(productGenre));
+  let isZipExpected = $derived(zipIntensiveGenres.includes(productGenre));
+  let isButtonExpected = $derived(buttonIntensiveGenres.includes(productGenre));
+
+  let isProdNonApparel = $derived(nonApparelGenres.includes(prodGenre));
+
+  // Authoritative BOM & Material Engineering Recommendations by Genre
+  const genreBOMRecommendations = {
+    'Polo': {
+      avgFabric: 0.35,
+      suggestedFabric: 'Pique',
+      trims: [
+        { trimName: 'Buttons (2-3 pcs, 18L)', average: 3.0 },
+        { trimName: 'Collar Fusing', average: 1.0 },
+        { trimName: 'Sewing Thread Tex 30', average: 1.0 }
+      ],
+      zips: []
+    },
+    'Tee': {
+      avgFabric: 0.22,
+      suggestedFabric: 'Single Jersey',
+      trims: [
+        { trimName: 'Rib Neck Fusing / Tape', average: 1.0 },
+        { trimName: 'Sewing Thread Tex 30', average: 1.0 }
+      ],
+      zips: []
+    },
+    'Shirt': {
+      avgFabric: 0.28,
+      suggestedFabric: 'Woven Cotton',
+      trims: [
+        { trimName: 'Shirt Buttons (7-9 pcs, 16L)', average: 8.0 },
+        { trimName: 'Collar & Cuff Interlining Fusing', average: 1.0 },
+        { trimName: 'Sewing Thread Tex 24', average: 1.0 }
+      ],
+      zips: []
+    },
+    'Bottoms': {
+      avgFabric: 0.50,
+      suggestedFabric: 'Twill / Knit Terry',
+      trims: [
+        { trimName: 'Waist Elastic 40mm', average: 0.85 },
+        { trimName: 'Waist Drawcord / Rope', average: 1.2 },
+        { trimName: 'Eyelets (2 pcs)', average: 2.0 },
+        { trimName: 'Pocketing Fabric', average: 0.15 },
+        { trimName: 'Sewing Thread Tex 40', average: 1.0 }
+      ],
+      zips: [
+        { zipName: 'Nylon Fly Zip 15cm', lengthAndQty: 'Std (1pc)' }
+      ]
+    },
+    'Shorts': {
+      avgFabric: 0.28,
+      suggestedFabric: 'French Terry / Poly Spandex',
+      trims: [
+        { trimName: 'Waist Elastic 35mm', average: 0.75 },
+        { trimName: 'Drawstring', average: 1.1 },
+        { trimName: 'Eyelets', average: 2.0 },
+        { trimName: 'Sewing Thread Tex 40', average: 1.0 }
+      ],
+      zips: []
+    },
+    'Sweat Pants': {
+      avgFabric: 0.55,
+      suggestedFabric: 'Fleece / French Terry',
+      trims: [
+        { trimName: 'Waist Elastic 40mm', average: 0.85 },
+        { trimName: 'Heavy Drawcord', average: 1.3 },
+        { trimName: 'Eyelets (2 pcs)', average: 2.0 },
+        { trimName: 'Rib Ankle Cuff', average: 0.2 },
+        { trimName: 'Sewing Thread Tex 40', average: 1.0 }
+      ],
+      zips: []
+    },
+    'Hoodies and Pullovers': {
+      avgFabric: 0.75,
+      suggestedFabric: 'Fleece 280-320 GSM',
+      trims: [
+        { trimName: 'Hood Drawcord with Metal Tips', average: 1.4 },
+        { trimName: 'Metal Eyelets', average: 2.0 },
+        { trimName: 'Rib Waist & Cuff', average: 0.25 },
+        { trimName: 'Sewing Thread Tex 40', average: 1.0 }
+      ],
+      zips: [
+        { zipName: 'Vislon 5.0 Open End Front Zip (if zip hoodie)', lengthAndQty: 'S-L: 65cm, XL-3XL: 70cm' }
+      ]
+    },
+    'Jackets': {
+      avgFabric: 0.85,
+      suggestedFabric: 'Bonded Box Fleece / Softshell',
+      trims: [
+        { trimName: 'Lining / Mesh Fabric', average: 0.45 },
+        { trimName: 'Metal Snap Buttons', average: 6.0 },
+        { trimName: 'Collar / Cuff Rib', average: 0.2 },
+        { trimName: 'Sewing Thread Tex 40', average: 1.0 }
+      ],
+      zips: [
+        { zipName: 'Metal 5.0 Open End Reversible Front Zip', lengthAndQty: 'S-L: 68cm, XL-3XL: 72cm' },
+        { zipName: 'Concealed Pocket Zips 18cm (2 pcs)', lengthAndQty: '18cm (2pcs)' }
+      ]
+    },
+    'Drinkwear': {
+      avgFabric: 1.0,
+      suggestedFabric: '18/8 Stainless Steel (Double Walled Vacuum)',
+      trims: [
+        { trimName: 'Silicone Leakproof Gasket Seal', average: 1.0 },
+        { trimName: 'BPA-Free Polypropylene Lid', average: 1.0 }
+      ],
+      zips: []
+    },
+    'Stationary': {
+      avgFabric: 1.0,
+      suggestedFabric: '120 GSM Natural Shade Woodfree Paper',
+      trims: [
+        { trimName: 'Hardcover Greyboard 2mm', average: 1.0 },
+        { trimName: 'Twin Ring Wire-O Binding', average: 1.0 },
+        { trimName: 'Satin Bookmark Ribbon', average: 1.0 }
+      ],
+      zips: []
+    },
+    'Bags': {
+      avgFabric: 1.0,
+      suggestedFabric: '900D Water Repellent Poly Canvas',
+      trims: [
+        { trimName: 'Nylon Webbing Shoulder Straps (38mm)', average: 2.2 },
+        { trimName: 'Quick Release POM Buckles', average: 2.0 },
+        { trimName: 'Sewing Thread Tex 60', average: 1.0 }
+      ],
+      zips: [
+        { zipName: 'Heavy Duty 8.0 Coil Main Compartment Zip', lengthAndQty: '60cm (1pc)' },
+        { zipName: 'Front Accessory Pocket Zip 5.0', lengthAndQty: '25cm (1pc)' }
+      ]
+    }
+  };
+
+  function getSizesForSampling(g, genre) {
+    if (nonApparelGenres.includes(genre)) {
+      if (masters?.non_apparel_sizes?.[genre] && masters.non_apparel_sizes[genre].length > 0) {
+        return masters.non_apparel_sizes[genre];
+      }
+      return nonApparelSizesMap[genre] || ['Std'];
+    }
+
+    // It's apparel! Check demographic scale
+    if (g === 'Infant') {
+      return masters?.gender_sizes?.['Infant'] || ['0-3', '3-6', '6-9', '9-12', '12-15', '15-18'];
+    }
+    if (g === 'Kids') {
+      return masters?.gender_sizes?.['Kids'] || ['K16', 'K18', 'K20', 'K22', 'K24', 'K26', 'K28', 'K30', 'K32', 'K34', 'K36', 'kids custom'];
+    }
+    if (g === 'Jr') {
+      return masters?.gender_sizes?.['Jr'] || ['Jr-XS', 'Jr-S', 'Jr-M', 'Jr-L', 'Jr Custom'];
+    }
+
+    // Adult scales (Men, Women, Unisex)
+    const baseAdultAlpha = ['XXS', 'XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL', 'Custom'];
+    const waistSizes = ['32', '34', '36', '38', '39', '40', '42', '44', '46', '48', '50', '52'];
+
+    if (bottomwearGenres.includes(genre)) {
+      return [...baseAdultAlpha, ...waistSizes];
+    }
+    return baseAdultAlpha;
+  }
+
+  function getSizesForGender(g) {
+    return getSizesForSampling(g, productGenre);
+  }
+
+  function handleProductGenreChange(newGenre) {
+    productGenre = newGenre;
+    const isNowNonApparel = nonApparelGenres.includes(newGenre);
+
+    if (isNowNonApparel) {
+      const validSizes = getSizesForSampling('N/A', newGenre);
+      sizes = sizes.map(s => ({
+        ...s,
+        gender: 'N/A',
+        size: validSizes.includes(s.size) ? s.size : (validSizes[0] || 'Std')
+      }));
+    } else {
+      sizes = sizes.map(s => {
+        const targetGender = s.gender === 'N/A' ? 'Men' : s.gender;
+        const validSizes = getSizesForSampling(targetGender, newGenre);
+        return {
+          ...s,
+          gender: targetGender,
+          size: validSizes.includes(s.size) ? s.size : (validSizes[0] || 'M')
+        };
+      });
+    }
+  }
+
+  function applyGenreBOMPreset(genre) {
+    const preset = genreBOMRecommendations[genre];
+    if (!preset) return;
+    const isTargetNonApparel = nonApparelGenres.includes(genre);
+
+    // Apply fabrics
+    if (preset.suggestedFabric) {
+      fabrics = [{
+        id: '',
+        fabricName: preset.suggestedFabric,
+        lotNo: '',
+        average: preset.avgFabric
+      }];
+    }
+
+    // Apply trims
+    if (preset.trims && preset.trims.length > 0) {
+      trims = preset.trims.map(t => ({ id: '', trimName: t.trimName, average: t.average }));
+    }
+
+    // Apply zips
+    if (preset.zips && preset.zips.length > 0) {
+      zips = preset.zips.map(z => ({ id: '', zipName: z.zipName, lengthAndQty: z.lengthAndQty }));
+    } else if (!zipIntensiveGenres.includes(genre) && !isTargetNonApparel) {
+      zips = [];
+    }
+
+    if (window.showToast) {
+      window.showToast(`Preloaded standard BOM specifications for ${genre}`, 'success');
+    }
+  }
 
   let authoritativeCompositions = $derived.by(() => {
     if (masters.compositions && masters.compositions.length > 0) {
@@ -222,7 +456,13 @@
   }
 
   function addSizeRow() {
-    sizes = [...sizes, { id: '', gender: 'Men', size: 'L', qty: 1 }];
+    if (isNonApparel) {
+      const valid = getSizesForSampling('N/A', productGenre);
+      sizes = [...sizes, { id: '', gender: 'N/A', size: valid[0] || 'Std', qty: 1 }];
+    } else {
+      const valid = getSizesForSampling('Men', productGenre);
+      sizes = [...sizes, { id: '', gender: 'Men', size: valid.includes('L') ? 'L' : (valid[0] || 'M'), qty: 1 }];
+    }
   }
   function removeSizeRow(idx) {
     sizes = sizes.filter((_, i) => i !== idx);
@@ -383,17 +623,28 @@
     prodName = tempProductName || '';
     selectedSampleToPull = sampleId;
 
-    // Convert Genders
-    const uniqueGenders = [...new Set(sizes.map(s => s.gender).filter(Boolean))];
-    if (uniqueGenders.length > 0) {
-      prodGenders = uniqueGenders.map(g => ({
+    if (isNonApparel) {
+      prodGenders = [{
         id: '',
-        gender: g,
-        pharmaNo: pharmas[0]?.newPharmaNo || pharmas[0]?.basePharmaNo || '',
-        measurementChartUrl: '',
+        gender: 'N/A',
+        pharmaNo: pharmas[0]?.basePharmaNo || '',
+        measurementChartUrl: tempMeasurementChart || '',
         productImages: imageUrl ? [imageUrl] : [],
         colorImages: []
-      }));
+      }];
+    } else {
+      // Convert Genders
+      const uniqueGenders = [...new Set(sizes.map(s => s.gender).filter(g => g && g !== 'N/A'))];
+      if (uniqueGenders.length > 0) {
+        prodGenders = uniqueGenders.map(g => ({
+          id: '',
+          gender: g,
+          pharmaNo: pharmas[0]?.newPharmaNo || pharmas[0]?.basePharmaNo || '',
+          measurementChartUrl: '',
+          productImages: imageUrl ? [imageUrl] : [],
+          colorImages: []
+        }));
+      }
     }
 
     // Convert Materials
@@ -404,9 +655,9 @@
           id: '',
           materialType: 'fabric',
           name: f.fabricName,
-          average: f.average || 0.35,
-          gsm: 220,
-          dia: 32,
+          average: f.average || (isNonApparel ? 1.0 : 0.35),
+          gsm: isNonApparel ? 0 : 220,
+          dia: isNonApparel ? 0 : 32,
           zipLengthQty: ''
         });
       }
@@ -460,16 +711,28 @@
       prodName = s.tempProductName || '';
       selectedSampleToPull = s.id;
 
-      const uniqueGenders = [...new Set((s.sizes || []).map(sz => sz.gender).filter(Boolean))];
-      if (uniqueGenders.length > 0) {
-        prodGenders = uniqueGenders.map(g => ({
+      const pullIsNonApparel = nonApparelGenres.includes(prodGenre);
+      if (pullIsNonApparel) {
+        prodGenders = [{
           id: '',
-          gender: g,
-          pharmaNo: s.pharmas?.[0]?.newPharmaNo || s.pharmas?.[0]?.basePharmaNo || '',
-          measurementChartUrl: '',
+          gender: 'N/A',
+          pharmaNo: s.pharmas?.[0]?.basePharmaNo || '',
+          measurementChartUrl: s.tempMeasurementChart || '',
           productImages: s.sampleImageUrl ? [s.sampleImageUrl] : (s.imageUrl ? [s.imageUrl] : []),
           colorImages: []
-        }));
+        }];
+      } else {
+        const uniqueGenders = [...new Set((s.sizes || []).map(sz => sz.gender).filter(g => g && g !== 'N/A'))];
+        if (uniqueGenders.length > 0) {
+          prodGenders = uniqueGenders.map(g => ({
+            id: '',
+            gender: g,
+            pharmaNo: s.pharmas?.[0]?.newPharmaNo || s.pharmas?.[0]?.basePharmaNo || '',
+            measurementChartUrl: '',
+            productImages: s.sampleImageUrl ? [s.sampleImageUrl] : (s.imageUrl ? [s.imageUrl] : []),
+            colorImages: []
+          }));
+        }
       }
 
       const mats = [];
@@ -707,7 +970,12 @@
 
             <div class="field-group">
               <label for="productGenre">Product Genre</label>
-              <select id="productGenre" class="input" bind:value={productGenre}>
+              <select
+                id="productGenre"
+                class="input"
+                bind:value={productGenre}
+                onchange={() => handleProductGenreChange(productGenre)}
+              >
                 <optgroup label="Apparel Genres">
                   {#each apparelGenres as g}
                     <option value={g}>{g}</option>
@@ -762,14 +1030,18 @@
           <!-- A. GENDER, SIZE & QTY -->
           <div class="sub-table-block">
             <div class="sub-table-header">
-              <span class="sub-title">1. Gender, Size & Quantity Matrix</span>
+              <span class="sub-title">1. {isNonApparel ? 'Capacity / Size & Quantity Breakdown (Non-Apparel)' : 'Gender, Size & Quantity Matrix (Apparel)'}</span>
               <button type="button" class="btn btn-secondary btn-xs" onclick={addSizeRow}>+ Add Size Row</button>
             </div>
             <table class="data-table">
               <thead>
                 <tr>
-                  <th style="width: 25%;">Gender</th>
-                  <th style="width: 35%;">Size</th>
+                  {#if !isNonApparel}
+                    <th style="width: 25%;">Gender / Demographic</th>
+                  {/if}
+                  <th style={isNonApparel ? "width: 60%;" : "width: 35%;"}>
+                    {isNonApparel ? 'Size / Specification' : (isBottomwear ? 'Size (Alpha + Waist 32-52)' : 'Size Scale')}
+                  </th>
                   <th style="width: 25%;">Qty (Pcs)</th>
                   <th style="width: 15%;"></th>
                 </tr>
@@ -777,25 +1049,27 @@
               <tbody>
                 {#each sizes as sz, idx}
                   <tr>
-                    <td>
-                      <select
-                        class="input table-input"
-                        bind:value={sz.gender}
-                        onchange={() => {
-                          const valid = getSizesForGender(sz.gender);
-                          if (!valid.includes(sz.size)) {
-                            sz.size = valid[0];
-                          }
-                        }}
-                      >
-                        {#each canonicalGenders as g}
-                          <option value={g}>{g}</option>
-                        {/each}
-                      </select>
-                    </td>
+                    {#if !isNonApparel}
+                      <td>
+                        <select
+                          class="input table-input"
+                          bind:value={sz.gender}
+                          onchange={() => {
+                            const valid = getSizesForSampling(sz.gender, productGenre);
+                            if (!valid.includes(sz.size)) {
+                              sz.size = valid[0];
+                            }
+                          }}
+                        >
+                          {#each canonicalGenders as g}
+                            <option value={g}>{g}</option>
+                          {/each}
+                        </select>
+                      </td>
+                    {/if}
                     <td>
                       <select class="input table-input" bind:value={sz.size}>
-                        {#each getSizesForGender(sz.gender) as s}
+                        {#each getSizesForSampling(sz.gender, productGenre) as s}
                           <option value={s}>{s}</option>
                         {/each}
                       </select>
@@ -812,18 +1086,38 @@
             </table>
           </div>
 
+          <!-- GENRE-DRIVEN MATERIAL & BOM RECOMMENDATION BANNER -->
+          {#if genreBOMRecommendations[productGenre]}
+            <div class="genre-recommendation-banner">
+              <div class="genre-rec-header">
+                <span class="genre-rec-badge">⚡ {productGenre} Specification Profile</span>
+                <span class="genre-rec-text">
+                  Recommended Avg: <strong>{genreBOMRecommendations[productGenre].avgFabric} {isNonApparel ? 'unit' : 'kg/pc'}</strong> ({genreBOMRecommendations[productGenre].suggestedFabric})
+                </span>
+              </div>
+              <button
+                type="button"
+                class="btn btn-secondary btn-xs"
+                onclick={() => applyGenreBOMPreset(productGenre)}
+                title="Pre-populate standard fabric average, thread tex, and trims for {productGenre}"
+              >
+                ✨ Preload {productGenre} Materials & Trims
+              </button>
+            </div>
+          {/if}
+
           <!-- B. FABRICS & LOTS -->
           <div class="sub-table-block">
             <div class="sub-table-header">
-              <span class="sub-title">2. Fabrics, Lot & Consumption Average (kg/pc)</span>
-              <button type="button" class="btn btn-secondary btn-xs" onclick={addFabricRow}>+ Add Fabric</button>
+              <span class="sub-title">2. {isNonApparel ? 'Base / Shell Raw Materials & Consumption' : 'Fabrics, Lot & Consumption Average (kg/pc)'}</span>
+              <button type="button" class="btn btn-secondary btn-xs" onclick={addFabricRow}>+ Add Material</button>
             </div>
             <table class="data-table">
               <thead>
                 <tr>
-                  <th style="width: 45%;">Fabric Name</th>
-                  <th style="width: 25%;">Lot No (to be added)</th>
-                  <th style="width: 20%;">Average (kg/pc)</th>
+                  <th style="width: 45%;">{isNonApparel ? 'Material / Specification' : 'Fabric Name'}</th>
+                  <th style="width: 25%;">{isNonApparel ? 'Grade / Batch No' : 'Lot No (to be added)'}</th>
+                  <th style="width: 20%;">{isNonApparel ? 'Average (per unit)' : 'Average (kg/pc)'}</th>
                   <th style="width: 10%;"></th>
                 </tr>
               </thead>
@@ -836,7 +1130,7 @@
                         bind:value={fb.fabricName}
                         displayKey="display_name"
                         valueKey="display_name"
-                        placeholder="Select 89 real FPCC fabrics..."
+                        placeholder={isNonApparel ? "e.g. Stainless Steel 304, Polycarbonate..." : "Select 89 real FPCC fabrics..."}
                       />
                     </td>
                     <td>
@@ -857,13 +1151,13 @@
           <!-- C. TRIMS -->
           <div class="sub-table-block">
             <div class="sub-table-header">
-              <span class="sub-title">3. Trims & Average Consumption</span>
+              <span class="sub-title">3. {isNonApparel ? 'Hardware, Accessories & Consumables' : 'Trims & Average Consumption (Buttons, Fusing, Thread)'}</span>
               <button type="button" class="btn btn-secondary btn-xs" onclick={addTrimRow}>+ Add Trim</button>
             </div>
             <table class="data-table">
               <thead>
                 <tr>
-                  <th style="width: 60%;">Trim Name</th>
+                  <th style="width: 60%;">Trim / Hardware Name</th>
                   <th style="width: 30%;">Average Consumption</th>
                   <th style="width: 10%;"></th>
                 </tr>
@@ -895,7 +1189,15 @@
           <!-- D. ZIPS -->
           <div class="sub-table-block">
             <div class="sub-table-header">
-              <span class="sub-title">4. Zips (Type, Size, Length & Qty)</span>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <span class="sub-title">4. Zips (Type, Size, Length & Qty)</span>
+                {#if !isZipExpected && !isNonApparel}
+                  <span class="optional-badge">Optional for {productGenre}</span>
+                {/if}
+                {#if isNonApparel && productGenre !== 'Bags'}
+                  <span class="optional-badge">Optional for Non-Apparel</span>
+                {/if}
+              </div>
               <button type="button" class="btn btn-secondary btn-xs" onclick={addZipRow}>+ Add Zip</button>
             </div>
             <table class="data-table">
@@ -967,15 +1269,15 @@
           <!-- F. TEMP PHARMA NO -->
           <div class="sub-table-block">
             <div class="sub-table-header">
-              <span class="sub-title">6. Temp Pharma No (Base Pattern & Grade Alterations)</span>
-              <button type="button" class="btn btn-secondary btn-xs" onclick={addPharmaRow}>+ Add Pharma</button>
+              <span class="sub-title">6. {isNonApparel ? 'Technical Drawing, Tooling & Mould Reference' : 'Temp Pharma No (Base Pattern & Grade Alterations)'}</span>
+              <button type="button" class="btn btn-secondary btn-xs" onclick={addPharmaRow}>+ Add Ref</button>
             </div>
             <table class="data-table">
               <thead>
                 <tr>
-                  <th style="width: 30%;">Base Pharma No</th>
+                  <th style="width: 30%;">{isNonApparel ? 'Base Spec / Mould #' : 'Base Pharma No'}</th>
                   <th style="width: 40%;">Changes Made / Alterations</th>
-                  <th style="width: 20%;">New Pharma No</th>
+                  <th style="width: 20%;">{isNonApparel ? 'New Rev / Tooling #' : 'New Pharma No'}</th>
                   <th style="width: 10%;"></th>
                 </tr>
               </thead>
@@ -983,13 +1285,13 @@
                 {#each pharmas as ph, idx}
                   <tr>
                     <td>
-                      <input type="text" class="input table-input" bind:value={ph.basePharmaNo} placeholder="e.g. PH-POLO-STD-M" />
+                      <input type="text" class="input table-input" bind:value={ph.basePharmaNo} placeholder={isNonApparel ? "e.g. MOULD-SSB-500-V1" : "e.g. PH-POLO-STD-M"} />
                     </td>
                     <td>
-                      <input type="text" class="input table-input" bind:value={ph.changesMade} placeholder="e.g. Body length +1 inch, relaxed chest" />
+                      <input type="text" class="input table-input" bind:value={ph.changesMade} placeholder={isNonApparel ? "e.g. Neck diameter increased by 2mm" : "e.g. Body length +1 inch, relaxed chest"} />
                     </td>
                     <td>
-                      <input type="text" class="input table-input" bind:value={ph.newPharmaNo} placeholder="e.g. PH-POLO-2026-REV1" />
+                      <input type="text" class="input table-input" bind:value={ph.newPharmaNo} placeholder={isNonApparel ? "e.g. MOULD-SSB-500-REV2" : "e.g. PH-POLO-2026-REV1"} />
                     </td>
                     <td class="text-right">
                       <button type="button" class="del-btn" onclick={() => removePharmaRow(idx)}>✕</button>
@@ -1208,7 +1510,33 @@
 
           <div class="field-group">
             <label for="prodGenre">Product Genre</label>
-            <select id="prodGenre" class="input" bind:value={prodGenre} onchange={refreshSKU}>
+            <select
+              id="prodGenre"
+              class="input"
+              bind:value={prodGenre}
+              onchange={() => {
+                refreshSKU();
+                if (nonApparelGenres.includes(prodGenre)) {
+                  prodGenders = [{
+                    id: '',
+                    gender: 'N/A',
+                    pharmaNo: prodGenders[0]?.pharmaNo || '',
+                    measurementChartUrl: prodGenders[0]?.measurementChartUrl || '',
+                    productImages: prodGenders[0]?.productImages || [],
+                    colorImages: []
+                  }];
+                } else if (prodGenders[0]?.gender === 'N/A') {
+                  prodGenders = [{
+                    id: '',
+                    gender: 'Men',
+                    pharmaNo: '',
+                    measurementChartUrl: '',
+                    productImages: [],
+                    colorImages: []
+                  }];
+                }
+              }}
+            >
               <optgroup label="Apparel Genres">
                 {#each apparelGenres as g}
                   <option value={g}>{g}</option>
@@ -1257,50 +1585,79 @@
           </div>
         </div>
 
-        <!-- GENDER VARIATIONS -->
-        <div class="sub-table-block" style="margin-top: 20px;">
-          <div class="sub-table-header">
-            <span class="sub-title">Gender Variations, Pharma No & Images</span>
-            <button type="button" class="btn btn-secondary btn-xs" onclick={addProductGender}>+ Add Gender</button>
-          </div>
-
-          {#each prodGenders as g, idx}
+        <!-- GENDER VARIATIONS / NON-APPAREL PROFILE -->
+        {#if isProdNonApparel}
+          <div class="sub-table-block" style="margin-top: 20px;">
+            <div class="sub-table-header">
+              <span class="sub-title">📦 Non-Apparel Product Profile & Dimensions (No Gender)</span>
+            </div>
             <div class="gender-card">
-              <div class="gender-card-header">
-                <div style="display:flex;align-items:center;gap:10px;">
-                  <span class="gender-tag">{g.gender}</span>
-                  <select class="input table-input" style="width: 140px;" bind:value={g.gender}>
-                    {#each canonicalGenders as cg}
-                      <option value={cg}>{cg}</option>
-                    {/each}
-                  </select>
-                </div>
-                <button type="button" class="del-btn" onclick={() => removeProductGender(idx)}>✕ Remove Gender</button>
-              </div>
-
-              <!-- Authoritative Per-Gender Size Scale Preview -->
-              <div class="gender-sizes-preview" style="margin-top: 8px; padding: 6px 10px; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.06); border-radius: 6px; font-size: 11px;">
-                <span style="color: var(--color-text-muted, #94a3b8); font-weight: 600; margin-right: 6px;">
-                  Valid Size Scale ({getSizesForGender(g.gender).length} sizes):
+              <div class="gender-sizes-preview" style="padding: 8px 12px; background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; font-size: 12px;">
+                <span style="color: var(--color-text-muted, #94a3b8); font-weight: 600; margin-right: 8px;">
+                  Authoritative Sizing / Capacity Scale ({getSizesForSampling('N/A', prodGenre).length} specs):
                 </span>
-                <span style="color: #818cf8; font-family: monospace; font-weight: 600;">
-                  {getSizesForGender(g.gender).join(', ')}
+                <span style="color: #38bdf8; font-family: monospace; font-weight: 700;">
+                  {getSizesForSampling('N/A', prodGenre).join(', ')}
                 </span>
               </div>
 
-              <div class="form-grid" style="margin-top: 10px;">
+              <div class="form-grid" style="margin-top: 12px;">
                 <div class="field-group">
-                  <label for="pharmaNo-{idx}">Pharma No (diff for gender)</label>
-                  <input id="pharmaNo-{idx}" type="text" class="input" placeholder="e.g. PH-M-POLO-2026" bind:value={g.pharmaNo} />
+                  <label for="prodMouldRef">Mould / Tooling / Die Reference No</label>
+                  <input id="prodMouldRef" type="text" class="input" placeholder="e.g. MOULD-SSB-500-V1" bind:value={prodGenders[0].pharmaNo} />
                 </div>
                 <div class="field-group">
-                  <label for="measChart-{idx}">Measurement Chart Upload / Link</label>
-                  <input id="measChart-{idx}" type="text" class="input" placeholder="e.g. /data/uploads/chart.pdf" bind:value={g.measurementChartUrl} />
+                  <label for="prodSpecUrl">Technical Drawing / Dimension Spec URL</label>
+                  <input id="prodSpecUrl" type="text" class="input" placeholder="e.g. /data/specs/bottle-500.pdf" bind:value={prodGenders[0].measurementChartUrl} />
                 </div>
               </div>
             </div>
-          {/each}
-        </div>
+          </div>
+        {:else}
+          <div class="sub-table-block" style="margin-top: 20px;">
+            <div class="sub-table-header">
+              <span class="sub-title">Gender Variations, Pharma No & Images</span>
+              <button type="button" class="btn btn-secondary btn-xs" onclick={addProductGender}>+ Add Gender</button>
+            </div>
+
+            {#each prodGenders as g, idx}
+              <div class="gender-card">
+                <div class="gender-card-header">
+                  <div style="display:flex;align-items:center;gap:10px;">
+                    <span class="gender-tag">{g.gender}</span>
+                    <select class="input table-input" style="width: 140px;" bind:value={g.gender}>
+                      {#each canonicalGenders as cg}
+                        <option value={cg}>{cg}</option>
+                      {/each}
+                    </select>
+                  </div>
+                  <button type="button" class="del-btn" onclick={() => removeProductGender(idx)}>✕ Remove Gender</button>
+                </div>
+
+                <!-- Authoritative Per-Gender Size Scale Preview -->
+                <div class="gender-sizes-preview" style="margin-top: 8px; padding: 6px 10px; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.06); border-radius: 6px; font-size: 11px;">
+                  <span style="color: var(--color-text-muted, #94a3b8); font-weight: 600; margin-right: 6px;">
+                    Valid Size Scale ({getSizesForSampling(g.gender, prodGenre).length} sizes):
+                  </span>
+                  <span style="color: #818cf8; font-family: monospace; font-weight: 600;">
+                    {getSizesForSampling(g.gender, prodGenre).join(', ')}
+                  </span>
+                </div>
+
+                <div class="form-grid" style="margin-top: 10px;">
+                  <div class="field-group">
+                    <label for="pharmaNo-{idx}">Pharma No (diff for gender)</label>
+                    <input id="pharmaNo-{idx}" type="text" class="input" placeholder="e.g. PH-M-POLO-2026" bind:value={g.pharmaNo} />
+                  </div>
+                  <div class="field-group">
+                    <label for="measChart-{idx}">Measurement Chart Upload / Link</label>
+                    <input id="measChart-{idx}" type="text" class="input" placeholder="e.g. /data/uploads/chart.pdf" bind:value={g.measurementChartUrl} />
+                  </div>
+                </div>
+              </div>
+            {/each}
+          </div>
+        {/if}
 
         <!-- COMPONENT MATERIALS BOM -->
         <div class="sub-table-block" style="margin-top: 20px;">
@@ -2086,6 +2443,61 @@
     text-align: center;
     color: var(--text-tertiary, #64748b);
     font-size: 0.85rem;
+  }
+
+  .genre-recommendation-banner {
+    margin-top: 14px;
+    margin-bottom: 6px;
+    padding: 10px 14px;
+    background: linear-gradient(135deg, rgba(37, 99, 235, 0.12) 0%, rgba(30, 41, 59, 0.45) 100%);
+    border: 1px solid rgba(59, 130, 246, 0.35);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .genre-rec-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .genre-rec-badge {
+    background: #2563eb;
+    color: #ffffff;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .genre-rec-text {
+    font-size: 12px;
+    color: var(--text-secondary, #cbd5e1);
+  }
+
+  .genre-rec-text strong {
+    color: #38bdf8;
+  }
+
+  .optional-badge {
+    font-size: 10px;
+    padding: 2px 6px;
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-tertiary, #94a3b8);
+    border-radius: 4px;
+    font-weight: 500;
+    text-transform: none;
+  }
+
+  .sub-table-block.dimmed {
+    opacity: 0.8;
   }
 
   @media (max-width: 1080px) {
