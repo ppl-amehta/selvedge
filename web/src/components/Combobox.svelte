@@ -21,9 +21,22 @@
   let inputEl = $state(null);
   let wrapperEl = $state(null);
   let dropdownEl = $state(null);
-  let dropdownPos = $state({ top: 0, left: 0, width: 240, flipUp: false });
+  let dropdownStyle = $state('');
 
   let safeVal = $derived(value ?? '');
+
+  // Svelte 5 action to portal the dropdown directly to document.body,
+  // bypassing any parent card, table, or stacking context trapping.
+  function portal(node) {
+    document.body.appendChild(node);
+    return {
+      destroy() {
+        if (node.parentNode) {
+          node.parentNode.removeChild(node);
+        }
+      }
+    };
+  }
 
   // Normalize items/options supporting strings, {label, value}, or master objects
   let normalizedList = $derived.by(() => {
@@ -68,15 +81,33 @@
   function updatePosition() {
     if (!inputEl) return;
     const rect = inputEl.getBoundingClientRect();
+    if (rect.bottom < 0 || rect.top > window.innerHeight) {
+      isOpen = false;
+      return;
+    }
+
     const spaceBelow = window.innerHeight - rect.bottom;
-    const estimatedHeight = 260;
-    const flipUp = spaceBelow < estimatedHeight && rect.top > estimatedHeight;
-    dropdownPos = {
-      top: flipUp ? Math.max(8, rect.top - estimatedHeight - 4) : rect.bottom + 4,
-      left: Math.max(8, Math.min(rect.left, window.innerWidth - 360)),
-      width: Math.max(rect.width, 240),
-      flipUp
-    };
+    const spaceAbove = rect.top;
+    const maxHeight = 280;
+    const flipUp = spaceBelow < 220 && spaceAbove > spaceBelow;
+
+    const width = Math.max(rect.width, 240);
+    let left = rect.left;
+    if (left + width > window.innerWidth - 8) {
+      left = Math.max(8, window.innerWidth - width - 8);
+    } else if (left < 8) {
+      left = 8;
+    }
+
+    if (flipUp) {
+      const bottom = Math.max(8, window.innerHeight - rect.top + 4);
+      const availHeight = Math.min(maxHeight, Math.max(100, spaceAbove - 16));
+      dropdownStyle = `position: fixed !important; bottom: ${bottom}px !important; top: auto !important; left: ${left}px !important; width: ${width}px !important; max-height: ${availHeight}px !important; z-index: 9999999 !important;`;
+    } else {
+      const top = rect.bottom + 4;
+      const availHeight = Math.min(maxHeight, Math.max(100, spaceBelow - 16));
+      dropdownStyle = `position: fixed !important; top: ${top}px !important; bottom: auto !important; left: ${left}px !important; width: ${width}px !important; max-height: ${availHeight}px !important; z-index: 9999999 !important;`;
+    }
   }
 
   // Click outside to dismiss dropdown reliably without blur races
@@ -119,8 +150,8 @@
     updatePosition();
     isOpen = true;
     isFiltering = enableFilter;
-    if (normalizedList.length > 0) {
-      const idx = normalizedList.findIndex(i => i.value === safeVal || i.display_name === safeVal);
+    if (filteredItems.length > 0) {
+      const idx = filteredItems.findIndex(i => i.value === safeVal || i.display_name === safeVal);
       highlightedIndex = idx >= 0 ? idx : 0;
     }
   }
@@ -197,8 +228,15 @@
   }
 
   function handleKeydown(e) {
+    if (e.key === 'Tab') {
+      isOpen = false;
+      isFiltering = false;
+      return;
+    }
+
     if (!isOpen) {
       if (e.key === 'ArrowDown' || e.key === 'Enter') {
+        e.preventDefault();
         openDropdown(false);
       }
       return;
@@ -237,8 +275,10 @@
       oninput={handleInput}
       onkeydown={handleKeydown}
       autocomplete="off"
+      role="combobox"
       aria-expanded={isOpen}
       aria-haspopup="listbox"
+      aria-autocomplete="list"
     />
     <div class="actions-wrap">
       {#if safeVal && !disabled}
@@ -267,9 +307,10 @@
   {#if isOpen}
     <div
       class="combobox-dropdown"
+      use:portal
       bind:this={dropdownEl}
       role="listbox"
-      style="top: {dropdownPos.top}px; left: {dropdownPos.left}px; width: {dropdownPos.width}px;"
+      style={dropdownStyle}
     >
       {#if filteredItems.length === 0 && !safeVal.trim()}
         <div class="combobox-empty">No options found</div>
@@ -387,19 +428,19 @@
     background: rgba(255, 255, 255, 0.08);
   }
 
-  .combobox-dropdown {
-    position: fixed;
-    max-width: min(440px, 90vw);
-    background-color: var(--bg-surface, #1e293b);
-    border: 1px solid var(--accent-primary, #3b82f6);
-    border-radius: 8px;
-    max-height: 260px;
-    overflow-y: auto;
-    z-index: 100000;
-    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6), 0 4px 12px rgba(0, 0, 0, 0.3);
+  :global(.combobox-dropdown) {
+    position: fixed !important;
+    max-width: min(460px, calc(100vw - 16px));
+    background-color: var(--bg-surface, #0e1422) !important;
+    border: 1px solid var(--accent-primary, #3b82f6) !important;
+    border-radius: 8px !important;
+    overflow-y: auto !important;
+    z-index: 9999999 !important;
+    box-shadow: 0 20px 48px rgba(0, 0, 0, 0.75), 0 8px 16px rgba(0, 0, 0, 0.4) !important;
+    font-family: var(--font-sans, sans-serif);
   }
 
-  .combobox-item {
+  :global(.combobox-item) {
     padding: 9px 14px;
     cursor: pointer;
     display: flex;
@@ -407,47 +448,47 @@
     align-items: center;
     gap: 12px;
     font-size: 13px;
-    color: var(--text-primary, #f8fafc);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    color: var(--text-primary, #f8fafc) !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
     transition: background-color 0.1s ease, color 0.1s ease;
   }
 
-  .combobox-item:last-child {
+  :global(.combobox-item:last-child) {
     border-bottom: none;
   }
 
-  .combobox-item:hover, .combobox-item.highlighted {
-    background-color: var(--accent-primary, #2563eb);
-    color: #ffffff;
+  :global(.combobox-item:hover), :global(.combobox-item.highlighted) {
+    background-color: var(--accent-primary, #2563eb) !important;
+    color: #ffffff !important;
   }
 
-  .combobox-item.selected {
+  :global(.combobox-item.selected) {
     font-weight: 700;
-    color: var(--accent-primary, #60a5fa);
+    color: var(--accent-primary, #60a5fa) !important;
   }
 
-  .combobox-item:hover.selected, .combobox-item.highlighted.selected {
-    color: #ffffff;
+  :global(.combobox-item:hover.selected), :global(.combobox-item.highlighted.selected) {
+    color: #ffffff !important;
   }
 
-  .item-text {
+  :global(.combobox-item .item-text) {
     flex: 1;
     white-space: normal;
     word-break: break-word;
   }
 
-  .item-meta {
+  :global(.combobox-item .item-meta) {
     font-size: 11px;
     color: var(--text-tertiary, #94a3b8);
     font-family: var(--font-mono, monospace);
     white-space: nowrap;
   }
 
-  .combobox-item:hover .item-meta, .combobox-item.highlighted .item-meta {
-    color: rgba(255, 255, 255, 0.85);
+  :global(.combobox-item:hover .item-meta), :global(.combobox-item.highlighted .item-meta) {
+    color: rgba(255, 255, 255, 0.9) !important;
   }
 
-  .combobox-empty {
+  :global(.combobox-empty) {
     padding: 14px 16px;
     font-size: 12px;
     color: var(--text-tertiary, #94a3b8);
@@ -455,7 +496,7 @@
     font-style: italic;
   }
 
-  .combobox-add-new {
+  :global(.combobox-add-new) {
     padding: 10px 14px;
     background-color: rgba(16, 185, 129, 0.15);
     border-top: 1px solid rgba(16, 185, 129, 0.3);
@@ -465,11 +506,11 @@
     font-size: 12px;
   }
 
-  .combobox-add-new:hover {
+  :global(.combobox-add-new:hover) {
     background-color: rgba(16, 185, 129, 0.25);
   }
 
-  .combobox-add-new.disabled {
+  :global(.combobox-add-new.disabled) {
     opacity: 0.5;
     cursor: not-allowed;
   }

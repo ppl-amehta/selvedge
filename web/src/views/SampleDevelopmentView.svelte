@@ -1778,7 +1778,6 @@
     overflow: visible;
     background: var(--bg-surface, #0f172a);
     position: relative;
-    z-index: 10;
   }
 
   .sub-table-header {
