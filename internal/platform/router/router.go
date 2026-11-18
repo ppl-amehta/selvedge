@@ -24,6 +24,7 @@ import (
 	"github.com/ppl-amehta/selvedge/internal/erp/masters"
 	"github.com/ppl-amehta/selvedge/internal/erp/orders"
 	"github.com/ppl-amehta/selvedge/internal/erp/planning"
+	"github.com/ppl-amehta/selvedge/internal/erp/products"
 	"github.com/ppl-amehta/selvedge/internal/graph"
 	"github.com/ppl-amehta/selvedge/internal/workflow"
 )
@@ -37,6 +38,7 @@ type AppServices struct {
 	Inventory *inventory.Service
 	Planning  *planning.Service
 	Cutting   *cutting.Service
+	Products  *products.Service
 	WebFS     fs.FS
 	WebDir    string
 }
@@ -574,7 +576,151 @@ func NewRouter(svc AppServices) http.Handler {
 		})
 	})
 
-	// 6. Workflow Dispatch Endpoint
+	// 6. Sample Development & Product Creation Endpoints
+	if svc.Products != nil {
+		r.Route("/api/samples", func(r chi.Router) {
+			r.Get("/next-development-no", func(w http.ResponseWriter, req *http.Request) {
+				no, err := svc.Products.SuggestNextDevelopmentNo()
+				if err != nil {
+					renderError(w, http.StatusInternalServerError, err.Error())
+					return
+				}
+				renderJSON(w, http.StatusOK, map[string]any{
+					"success":                true,
+					"suggestedDevelopmentNo": no,
+					"nextDevelopmentNo":      no,
+				})
+			})
+
+			r.Post("/", func(w http.ResponseWriter, req *http.Request) {
+				var payload products.SampleDevelopmentPayload
+				if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
+					renderError(w, http.StatusBadRequest, "Invalid JSON payload: "+err.Error())
+					return
+				}
+				res, err := svc.Products.CreateSampleDevelopment(payload)
+				if err != nil {
+					renderError(w, http.StatusBadRequest, err.Error())
+					return
+				}
+				renderJSON(w, http.StatusOK, res)
+			})
+
+			r.Get("/", func(w http.ResponseWriter, req *http.Request) {
+				limit, _ := strconv.Atoi(req.URL.Query().Get("limit"))
+				offset, _ := strconv.Atoi(req.URL.Query().Get("offset"))
+				list, err := svc.Products.ListSampleDevelopments(limit, offset)
+				if err != nil {
+					renderError(w, http.StatusInternalServerError, err.Error())
+					return
+				}
+				renderJSON(w, http.StatusOK, map[string]any{"success": true, "data": list})
+			})
+
+			r.Get("/{id}", func(w http.ResponseWriter, req *http.Request) {
+				id := chi.URLParam(req, "id")
+				detail, err := svc.Products.GetSampleDevelopment(id)
+				if err != nil {
+					renderError(w, http.StatusNotFound, "Sample not found: "+err.Error())
+					return
+				}
+				renderJSON(w, http.StatusOK, map[string]any{"success": true, "data": detail})
+			})
+
+			r.Patch("/{id}/status", func(w http.ResponseWriter, req *http.Request) {
+				id := chi.URLParam(req, "id")
+				var body struct {
+					Status      string `json:"status"`
+					ReworkNotes string `json:"reworkNotes"`
+				}
+				if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
+					renderError(w, http.StatusBadRequest, "Invalid JSON: "+err.Error())
+					return
+				}
+				if err := svc.Products.UpdateSampleDevelopmentStatus(id, body.Status, body.ReworkNotes); err != nil {
+					renderError(w, http.StatusInternalServerError, err.Error())
+					return
+				}
+				renderJSON(w, http.StatusOK, map[string]any{"success": true, "message": "Status updated successfully"})
+			})
+		})
+
+		r.Route("/api/products", func(r chi.Router) {
+			r.Get("/suggest-sku", func(w http.ResponseWriter, req *http.Request) {
+				brand := req.URL.Query().Get("brandLabel")
+				genre := req.URL.Query().Get("genre")
+				name := req.URL.Query().Get("productName")
+				sku := svc.Products.SuggestSKU(brand, genre, name)
+				renderJSON(w, http.StatusOK, map[string]any{
+					"success": true,
+					"skuCode": sku,
+				})
+			})
+
+			r.Post("/", func(w http.ResponseWriter, req *http.Request) {
+				var payload products.CreateProductPayload
+				if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
+					renderError(w, http.StatusBadRequest, "Invalid JSON: "+err.Error())
+					return
+				}
+				res, err := svc.Products.CreateMasterProduct(payload)
+				if err != nil {
+					renderError(w, http.StatusBadRequest, err.Error())
+					return
+				}
+				renderJSON(w, http.StatusOK, res)
+			})
+
+			r.Get("/", func(w http.ResponseWriter, req *http.Request) {
+				limit, _ := strconv.Atoi(req.URL.Query().Get("limit"))
+				offset, _ := strconv.Atoi(req.URL.Query().Get("offset"))
+				list, err := svc.Products.ListMasterProducts(limit, offset)
+				if err != nil {
+					renderError(w, http.StatusInternalServerError, err.Error())
+					return
+				}
+				renderJSON(w, http.StatusOK, map[string]any{"success": true, "data": list})
+			})
+
+			r.Get("/{id}", func(w http.ResponseWriter, req *http.Request) {
+				id := chi.URLParam(req, "id")
+				prod, err := svc.Products.GetMasterProduct(id)
+				if err != nil {
+					renderError(w, http.StatusNotFound, "Product not found: "+err.Error())
+					return
+				}
+				renderJSON(w, http.StatusOK, map[string]any{"success": true, "data": prod})
+			})
+		})
+
+		r.Route("/api/client-pricing", func(r chi.Router) {
+			r.Get("/", func(w http.ResponseWriter, req *http.Request) {
+				clientID := req.URL.Query().Get("clientId")
+				list, err := svc.Products.ListClientProductPricing(clientID)
+				if err != nil {
+					renderError(w, http.StatusInternalServerError, err.Error())
+					return
+				}
+				renderJSON(w, http.StatusOK, map[string]any{"success": true, "data": list})
+			})
+
+			r.Post("/", func(w http.ResponseWriter, req *http.Request) {
+				var payload products.ClientPricingPayload
+				if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
+					renderError(w, http.StatusBadRequest, "Invalid JSON: "+err.Error())
+					return
+				}
+				res, err := svc.Products.SetClientProductPricing(payload)
+				if err != nil {
+					renderError(w, http.StatusBadRequest, err.Error())
+					return
+				}
+				renderJSON(w, http.StatusOK, res)
+			})
+		})
+	}
+
+	// 7. Workflow Dispatch Endpoint
 	r.Post("/api/workflows/dispatch", func(w http.ResponseWriter, req *http.Request) {
 		count, err := svc.Workflow.ProcessPendingEvents()
 		if err != nil {

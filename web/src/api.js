@@ -372,5 +372,109 @@ export const api = {
       throw new Error(json.error || `Failed to fetch bundle slip ${bundleId}`);
     }
     return json.data;
+  },
+
+  // --- Sample Development & Product Creation ---
+
+  async getNextDevelopmentNo() {
+    const res = await fetch(`${API_BASE}/samples/next-development-no`);
+    const json = await res.json();
+    return json.nextDevelopmentNo || '';
+  },
+
+  async createSampleDevelopment(payload) {
+    const res = await fetch(`${API_BASE}/samples`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const json = await res.json();
+    if (!res.ok || json.success === false) {
+      throw new Error(json.error || 'Failed to save sample development');
+    }
+    return json;
+  },
+
+  async getSampleDevelopment(id) {
+    const res = await fetch(`${API_BASE}/samples/${encodeURIComponent(id)}`);
+    const json = await res.json();
+    if (!res.ok || json.success === false) {
+      throw new Error(json.error || 'Sample development not found');
+    }
+    return json.data;
+  },
+
+  async listSampleDevelopments(limit = 50, offset = 0) {
+    const res = await fetch(`${API_BASE}/samples?limit=${limit}&offset=${offset}`);
+    const json = await res.json();
+    return json.data || [];
+  },
+
+  async updateSampleStatus(id, status, reworkNotes = '') {
+    const res = await fetch(`${API_BASE}/samples/${encodeURIComponent(id)}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status, reworkNotes })
+    });
+    const json = await res.json();
+    if (!res.ok || json.success === false) {
+      throw new Error(json.error || 'Failed to update sample status');
+    }
+    return json;
+  },
+
+  async suggestSKU(brandLabel, genre, productName) {
+    const url = `${API_BASE}/products/suggest-sku?brandLabel=${encodeURIComponent(brandLabel || '')}&genre=${encodeURIComponent(genre || '')}&productName=${encodeURIComponent(productName || '')}`;
+    const res = await fetch(url);
+    const json = await res.json();
+    return json.skuCode || '';
+  },
+
+  async createMasterProduct(payload) {
+    const res = await fetch(`${API_BASE}/products`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const json = await res.json();
+    if (!res.ok || json.success === false) {
+      throw new Error(json.error || 'Failed to create master product');
+    }
+    return json;
+  },
+
+  async getMasterProduct(id) {
+    const res = await fetch(`${API_BASE}/products/${encodeURIComponent(id)}`);
+    const json = await res.json();
+    if (!res.ok || json.success === false) {
+      throw new Error(json.error || 'Master product not found');
+    }
+    return json.data;
+  },
+
+  async listMasterProducts(limit = 50, offset = 0) {
+    const res = await fetch(`${API_BASE}/products?limit=${limit}&offset=${offset}`);
+    const json = await res.json();
+    return json.data || [];
+  },
+
+  async setClientProductPricing(payload) {
+    const res = await fetch(`${API_BASE}/client-pricing`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const json = await res.json();
+    if (!res.ok || json.success === false) {
+      throw new Error(json.error || 'Failed to set client pricing');
+    }
+    return json;
+  },
+
+  async listClientProductPricing(clientId = '') {
+    const url = clientId ? `${API_BASE}/client-pricing?clientId=${encodeURIComponent(clientId)}` : `${API_BASE}/client-pricing`;
+    const res = await fetch(url);
+    const json = await res.json();
+    return json.data || [];
   }
 };

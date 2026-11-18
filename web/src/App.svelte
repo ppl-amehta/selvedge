@@ -1,13 +1,14 @@
 <script>
   import { onMount } from 'svelte';
   import { api } from './api.js';
+  import SampleDevelopmentView from './views/SampleDevelopmentView.svelte';
   import OrderTakingView from './views/OrderTakingView.svelte';
   import InwardView from './views/InwardView.svelte';
   import OrderPrepPlanningView from './views/OrderPrepPlanningView.svelte';
   import CuttingView from './views/CuttingView.svelte';
   import GraphInspectorModal from './components/GraphInspectorModal.svelte';
 
-  let activeStation = $state('orders'); // 'orders' | 'inward' | 'planning' | 'cutting'
+  let activeStation = $state('samples'); // 'samples' | 'orders' | 'inward' | 'planning' | 'cutting'
   let masters = $state({});
   let isGraphOpen = $state(false);
   let isOnline = $state(false);
@@ -84,6 +85,13 @@
   <nav class="station-nav">
     <button
       class="station-btn"
+      class:active={activeStation === 'samples'}
+      onclick={() => activeStation = 'samples'}
+    >
+      <span>Sampling & Products</span>
+    </button>
+    <button
+      class="station-btn"
       class:active={activeStation === 'orders'}
       onclick={() => activeStation = 'orders'}
     >
@@ -143,7 +151,9 @@
 </header>
 
 <main class="main-content">
-  {#if activeStation === 'orders'}
+  {#if activeStation === 'samples'}
+    <SampleDevelopmentView {masters} />
+  {:else if activeStation === 'orders'}
     <OrderTakingView {masters} />
   {:else if activeStation === 'inward'}
     <InwardView {masters} />
