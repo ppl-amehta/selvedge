@@ -61,9 +61,25 @@
     'Drinkwear', 'Headgear', 'Bags', 'Stationary', 'Electronics', 'Others'
   ];
 
+  let resolvedApparelGenres = $derived((masters.apparel_genres && masters.apparel_genres.length > 0)
+    ? masters.apparel_genres
+    : apparelGenres);
+
+  let resolvedNonApparelGenres = $derived((masters.non_apparel_genres && masters.non_apparel_genres.length > 0)
+    ? masters.non_apparel_genres
+    : nonApparelGenres);
+
   const brandLabelList = [
     'ETTU', 'Jeep', 'OMG', 'Illa', 'Waterdrop', 'American Athlete', 'TUC', 'Chocotopia', 'Citreon'
   ];
+
+  let resolvedBrandLabels = $derived.by(() => {
+    if (masters.label_brands && masters.label_brands.length > 0) {
+      const dbBrands = masters.label_brands.map(b => b.display_name || b.code || b);
+      return Array.from(new Set([...dbBrands, ...brandLabelList]));
+    }
+    return brandLabelList;
+  });
 
   const additionalLabelTypes = [
     'Size label', 'Main+Size Label', 'washcare Label', 'COO Label', 'side Label',
@@ -997,7 +1013,7 @@
                     <label for="item-subcat-{item.id}">Product Genre / Sub-Category</label>
                     <Combobox
                       id="item-subcat-{item.id}"
-                      items={item.category === 'Non Apparel' ? nonApparelGenres : apparelGenres}
+                      items={item.category === 'Non Apparel' ? resolvedNonApparelGenres : resolvedApparelGenres}
                       bind:value={item.subCategory}
                       placeholder="Select genre (Polo, Jacket, Drinkwear...)"
                       onSelect={(val) => onSubCategoryChange(idx, typeof val === 'object' ? (val.display_name || val.value) : val)}
@@ -1181,7 +1197,7 @@
                       <label for="item-brand-label-{item.id}">Brand Label <span class="req">*</span></label>
                       <Combobox
                         id="item-brand-label-{item.id}"
-                        items={brandLabelList}
+                        items={resolvedBrandLabels}
                         bind:value={item.brandLabel}
                         placeholder="Select Brand Label (ETTU, Jeep, OMG, Illa...)"
                       />

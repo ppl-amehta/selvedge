@@ -31,6 +31,8 @@ func TestMasterCatalogConsolidation(t *testing.T) {
 		"../../../migrations/007_invoices_and_multi_fabric_lots.sql",
 		"../../../migrations/008_consolidate_master_dropdowns.sql",
 		"../../../migrations/009_clean_foundational_excel_truth.sql",
+		"../../../migrations/010_sample_development_and_product_creation.sql",
+		"../../../migrations/011_enrich_gender_sizes_and_dropdown_relationships.sql",
 	}
 	for _, mFile := range migrations {
 		content, err := os.ReadFile(mFile)
@@ -56,6 +58,7 @@ func TestMasterCatalogConsolidation(t *testing.T) {
 		"zips", "trims", "labels", "packaging", "product_categories", "subcategories",
 		"genders", "branding_types", "inward_types", "cust_packaging", "order_processes",
 		"size_scales", "sizes", "fabric_types", "zip_types", "packaging_types",
+		"compositions", "gender_sizes", "non_apparel_sizes", "apparel_genres", "non_apparel_genres",
 	}
 
 	for _, k := range requiredKeys {

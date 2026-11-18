@@ -111,12 +111,55 @@
   let cpFilterClient = $state('');
   let isSavingPricing = $state(false);
 
-  // Authoritative Genres list
-  const genresList = [
-    'Polo', 'Tee', 'Hoodies and Pullovers', 'Jackets', 'Bottoms', 'Quarter zip',
-    'Shirt', 'Shorts', 'Sweat Pants', 'Sweat shirt', 'Sweater', 'Tights', 'Vest',
-    'Dresses', 'Skorts', 'Onsies', 'Caps', 'Traded apparel', 'Bags', 'Accessories'
-  ];
+  // Authoritative Canonical Taxonomies
+  const canonicalGenders = ['Men', 'Women', 'Unisex', 'Infant', 'Jr', 'Kids'];
+
+  const fallbackGenderSizes = {
+    Men: ['XXS', 'XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL', 'Custom', '32', '34', '36', '38', '39', '40', '42', '44', '46', '48', '50', '52'],
+    Women: ['XXS', 'XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL', 'Custom', '32', '34', '36', '38', '39', '40', '42', '44', '46', '48', '50', '52'],
+    Unisex: ['XXS', 'XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL', 'Custom', '32', '34', '36', '38', '39', '40', '42', '44', '46', '48', '50', '52'],
+    Infant: ['0-3', '3-6', '6-9', '9-12', '12-15', '15-18'],
+    Kids: ['K16', 'K18', 'K20', 'K22', 'K24', 'K26', 'K28', 'K30', 'K32', 'K34', 'K36', 'kids custom'],
+    Jr: ['Jr-XS', 'Jr-S', 'Jr-M', 'Jr-L', 'Jr Custom']
+  };
+
+  function getSizesForGender(g) {
+    if (masters?.gender_sizes?.[g] && masters.gender_sizes[g].length > 0) {
+      return masters.gender_sizes[g];
+    }
+    return fallbackGenderSizes[g] || fallbackGenderSizes['Men'];
+  }
+
+  let apparelGenres = $derived(
+    (masters.apparel_genres && masters.apparel_genres.length > 0)
+      ? masters.apparel_genres
+      : [
+          'Polo', 'Tee', 'Hoodies and Pullovers', 'Jackets', 'Bottoms', 'Quarter zip',
+          'Shirt', 'Shorts', 'Sweat Pants', 'Sweat shirt', 'Sweater', 'Sweatshirt',
+          'Tights', 'Vest', 'Dress', 'Skorts', 'Onsies', 'Caps', 'Traded apparel'
+        ]
+  );
+
+  let nonApparelGenres = $derived(
+    (masters.non_apparel_genres && masters.non_apparel_genres.length > 0)
+      ? masters.non_apparel_genres
+      : ['Drinkwear', 'Headgear', 'Bags', 'Stationary', 'Electronics', 'Others']
+  );
+
+  let authoritativeCompositions = $derived.by(() => {
+    if (masters.compositions && masters.compositions.length > 0) {
+      return masters.compositions.map(c => c.display_name || c.code || c);
+    }
+    return [
+      '95%Poly 5%SP', '40%Nylon 38%Poly 12%SP', '92%Poly 8%SP', '100%Poly',
+      '88%Poly 12%SP', '60%Cot 30%Tencel 10%SP', '90%Poly 10%SP', '100%Cot',
+      '90%Nylon 10%SP', '58%R.Cot 38%R.Poly 4%SP', '65%R.Cot 35%R.Poly',
+      '85%Poly 15%SP', '52%Cot 48%Poly', '60%Modal 30%Tencel 10%SP',
+      '95%Cot 5%SP', '60%Cot 40%Poly', '65%Poly 35%Cot',
+      '50%A Cot 45% Siro Viscose 5%SP', '100%R.Poly', '50%Cot 45%Poly 5%SP',
+      '70%Nylon 30%SP', '43%Cot 27%Viscose 30%Poly'
+    ];
+  });
 
   onMount(async () => {
     await refreshNextDevNo();
@@ -665,9 +708,16 @@
             <div class="field-group">
               <label for="productGenre">Product Genre</label>
               <select id="productGenre" class="input" bind:value={productGenre}>
-                {#each genresList as g}
-                  <option value={g}>{g}</option>
-                {/each}
+                <optgroup label="Apparel Genres">
+                  {#each apparelGenres as g}
+                    <option value={g}>{g}</option>
+                  {/each}
+                </optgroup>
+                <optgroup label="Non-Apparel Genres">
+                  {#each nonApparelGenres as g}
+                    <option value={g}>{g}</option>
+                  {/each}
+                </optgroup>
               </select>
             </div>
 
@@ -728,16 +778,27 @@
                 {#each sizes as sz, idx}
                   <tr>
                     <td>
-                      <select class="input table-input" bind:value={sz.gender}>
-                        <option value="Men">Men</option>
-                        <option value="Women">Women</option>
-                        <option value="Unisex">Unisex</option>
-                        <option value="Boys">Boys</option>
-                        <option value="Girls">Girls</option>
+                      <select
+                        class="input table-input"
+                        bind:value={sz.gender}
+                        onchange={() => {
+                          const valid = getSizesForGender(sz.gender);
+                          if (!valid.includes(sz.size)) {
+                            sz.size = valid[0];
+                          }
+                        }}
+                      >
+                        {#each canonicalGenders as g}
+                          <option value={g}>{g}</option>
+                        {/each}
                       </select>
                     </td>
                     <td>
-                      <input type="text" class="input table-input" bind:value={sz.size} placeholder="e.g. S, M, L, XL" />
+                      <select class="input table-input" bind:value={sz.size}>
+                        {#each getSizesForGender(sz.gender) as s}
+                          <option value={s}>{s}</option>
+                        {/each}
+                      </select>
                     </td>
                     <td>
                       <input type="number" class="input table-input" min="1" bind:value={sz.qty} />
@@ -1142,9 +1203,16 @@
           <div class="field-group">
             <label for="prodGenre">Product Genre</label>
             <select id="prodGenre" class="input" bind:value={prodGenre} onchange={refreshSKU}>
-              {#each genresList as g}
-                <option value={g}>{g}</option>
-              {/each}
+              <optgroup label="Apparel Genres">
+                {#each apparelGenres as g}
+                  <option value={g}>{g}</option>
+                {/each}
+              </optgroup>
+              <optgroup label="Non-Apparel Genres">
+                {#each nonApparelGenres as g}
+                  <option value={g}>{g}</option>
+                {/each}
+              </optgroup>
             </select>
           </div>
 
@@ -1195,15 +1263,23 @@
               <div class="gender-card-header">
                 <div style="display:flex;align-items:center;gap:10px;">
                   <span class="gender-tag">{g.gender}</span>
-                  <select class="input table-input" style="width: 130px;" bind:value={g.gender}>
-                    <option value="Men">Men</option>
-                    <option value="Women">Women</option>
-                    <option value="Unisex">Unisex</option>
-                    <option value="Boys">Boys</option>
-                    <option value="Girls">Girls</option>
+                  <select class="input table-input" style="width: 140px;" bind:value={g.gender}>
+                    {#each canonicalGenders as cg}
+                      <option value={cg}>{cg}</option>
+                    {/each}
                   </select>
                 </div>
                 <button type="button" class="del-btn" onclick={() => removeProductGender(idx)}>✕ Remove Gender</button>
+              </div>
+
+              <!-- Authoritative Per-Gender Size Scale Preview -->
+              <div class="gender-sizes-preview" style="margin-top: 8px; padding: 6px 10px; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.06); border-radius: 6px; font-size: 11px;">
+                <span style="color: var(--color-text-muted, #94a3b8); font-weight: 600; margin-right: 6px;">
+                  Valid Size Scale ({getSizesForGender(g.gender).length} sizes):
+                </span>
+                <span style="color: #818cf8; font-family: monospace; font-weight: 600;">
+                  {getSizesForGender(g.gender).join(', ')}
+                </span>
               </div>
 
               <div class="form-grid" style="margin-top: 10px;">
@@ -1294,13 +1370,11 @@
           </div>
 
           <div class="field-group">
-            <label for="composition">Composition</label>
-            <input
-              id="composition"
-              type="text"
-              class="input"
-              placeholder="e.g. 60% Cotton 40% Polyester"
+            <label for="composition">Composition (22 Authoritative Compositions)</label>
+            <Combobox
+              items={authoritativeCompositions}
               bind:value={composition}
+              placeholder="Select or enter composition (e.g. 60%Cot 40%Poly)..."
             />
           </div>
 

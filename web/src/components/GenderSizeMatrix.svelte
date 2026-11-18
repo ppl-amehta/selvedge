@@ -9,10 +9,10 @@
   } = $props();
 
   const standardApparelSizes = ['XXS', 'XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL', 'Custom'];
-  const waistApparelSizes = ['32', '34', '36', '38', '40', '42', '44', '46', '48', '50', '52'];
+  const waistApparelSizes = ['32', '34', '36', '38', '39', '40', '42', '44', '46', '48', '50', '52'];
   const infantSizes = ['0-3', '3-6', '6-9', '9-12', '12-15', '15-18'];
-  const kidsSizes = ['K16', 'K18', 'K20', 'K22', 'K24', 'K26', 'K28', 'K30', 'K32', 'K34', 'K36'];
-  const juniorSizes = ['Jr-XS', 'Jr-S', 'Jr-M', 'Jr-L'];
+  const kidsSizes = ['K16', 'K18', 'K20', 'K22', 'K24', 'K26', 'K28', 'K30', 'K32', 'K34', 'K36', 'kids custom'];
+  const juniorSizes = ['Jr-XS', 'Jr-S', 'Jr-M', 'Jr-L', 'Jr Custom'];
 
   const drinkwearSizes = ['100ml', '150ml', '200ml', '250ml', '300ml', '500ml', '750ml', '1Litre', '1.5 Litre', '2 Litre'];
   const headgearSizes = ['Std', 'Kids', 'Large', 'Small'];

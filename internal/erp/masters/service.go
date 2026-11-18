@@ -85,6 +85,8 @@ func (s *Service) GetAllMasters() (map[string]any, error) {
 		"washcare":          make([]MasterItem, 0),
 		"packaging_type":    make([]MasterItem, 0),
 		"packaging_size":    make([]MasterItem, 0),
+		"composition":       make([]MasterItem, 0),
+		"product_genre":     make([]MasterItem, 0),
 	}
 
 	rows, err := s.db.Query("SELECT id, category, code, display_name, coalesce(meta_json, '{}') FROM master_items ORDER BY display_name")
@@ -103,7 +105,37 @@ func (s *Service) GetAllMasters() (map[string]any, error) {
 		}
 	}
 
-	// 3. Recent Orders
+	// 3. Gender to Exact Size Taxonomy (Authoritative Sheet 4 Ground Truth)
+	genderSizes := map[string][]string{
+		"Men":    {"XXS", "XS", "S", "M", "L", "XL", "2XL", "3XL", "4XL", "5XL", "Custom", "32", "34", "36", "38", "39", "40", "42", "44", "46", "48", "50", "52"},
+		"Women":  {"XXS", "XS", "S", "M", "L", "XL", "2XL", "3XL", "4XL", "5XL", "Custom", "32", "34", "36", "38", "39", "40", "42", "44", "46", "48", "50", "52"},
+		"Unisex": {"XXS", "XS", "S", "M", "L", "XL", "2XL", "3XL", "4XL", "5XL", "Custom", "32", "34", "36", "38", "39", "40", "42", "44", "46", "48", "50", "52"},
+		"Infant": {"0-3", "3-6", "6-9", "9-12", "12-15", "15-18"},
+		"Kids":   {"K16", "K18", "K20", "K22", "K24", "K26", "K28", "K30", "K32", "K34", "K36", "kids custom"},
+		"Jr":     {"Jr-XS", "Jr-S", "Jr-M", "Jr-L", "Jr Custom"},
+	}
+
+	nonApparelSizes := map[string][]string{
+		"Drinkwear":   {"100ml", "150ml", "200ml", "250ml", "300ml", "500ml", "750ml", "1Litre", "1.5 Litre", "2 Litre"},
+		"Headgear":    {"Std", "Kids", "Large", "Small"},
+		"Caps":        {"Std", "Kids", "Large", "Small"},
+		"Bags":        {"Std"},
+		"Stationary":  {"A4", "A3", "A5", "A6", "B5"},
+		"Electronics": {"Std"},
+		"Others":      {"Std"},
+	}
+
+	apparelGenres := []string{
+		"Polo", "Tee", "Hoodies and Pullovers", "Jackets", "Bottoms", "Quarter zip",
+		"Shirt", "Shorts", "Sweat Pants", "Sweat shirt", "Sweater", "Sweatshirt",
+		"Tights", "Vest", "Dress", "Skorts", "Onsies", "Caps", "Traded apparel",
+	}
+
+	nonApparelGenres := []string{
+		"Drinkwear", "Headgear", "Bags", "Stationary", "Electronics", "Others",
+	}
+
+	// 4. Recent Orders
 	recentOrders, _ := s.listRecentOrders()
 	if recentOrders == nil {
 		recentOrders = make([]map[string]any, 0)
@@ -130,6 +162,12 @@ func (s *Service) GetAllMasters() (map[string]any, error) {
 		"order_processes":    categoriesMap["order_process"],
 		"size_scales":        categoriesMap["size_scale"],
 		"sizes":              categoriesMap["size"],
+		"gender_sizes":       genderSizes,
+		"non_apparel_sizes":  nonApparelSizes,
+		"compositions":       categoriesMap["composition"],
+		"product_genres":     categoriesMap["product_genre"],
+		"apparel_genres":     apparelGenres,
+		"non_apparel_genres": nonApparelGenres,
 		"fabric_types":       categoriesMap["fabric_type"],
 		"zip_types":          categoriesMap["zip_type"],
 		"zip_sliders":        categoriesMap["zip_slider"],

@@ -8,8 +8,20 @@
   let parsedPreview = $state([]);
   let importFileName = $state('');
 
-  const sizes = ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL', 'Free'];
-  const genders = ['Men', 'Women', 'Unisex', 'Kids'];
+  const genders = ['Men', 'Women', 'Unisex', 'Infant', 'Jr', 'Kids'];
+
+  const genderSizesMap = {
+    Men: ['XXS', 'XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL', 'Custom', '32', '34', '36', '38', '39', '40', '42', '44', '46', '48', '50', '52'],
+    Women: ['XXS', 'XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL', 'Custom', '32', '34', '36', '38', '39', '40', '42', '44', '46', '48', '50', '52'],
+    Unisex: ['XXS', 'XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL', 'Custom', '32', '34', '36', '38', '39', '40', '42', '44', '46', '48', '50', '52'],
+    Infant: ['0-3', '3-6', '6-9', '9-12', '12-15', '15-18'],
+    Kids: ['K16', 'K18', 'K20', 'K22', 'K24', 'K26', 'K28', 'K30', 'K32', 'K34', 'K36', 'kids custom'],
+    Jr: ['Jr-XS', 'Jr-S', 'Jr-M', 'Jr-L', 'Jr Custom']
+  };
+
+  function getSizesForGender(g) {
+    return genderSizesMap[g] || genderSizesMap['Men'];
+  }
 
   const reAlpha = /^[A-Za-z\s.'-]+$/;
   const reNumeric = /^[0-9]+$/;
@@ -18,6 +30,8 @@
     const errors = [];
     const name = (row.name || '').trim();
     const number = (row.number || '').trim();
+    const g = row.gender || 'Men';
+    const validSizes = getSizesForGender(g);
 
     if (name && !reAlpha.test(name)) {
       errors.push('Name must be alphabetical only (no numbers/symbols)');
@@ -25,16 +39,21 @@
     if (number && !reNumeric.test(number)) {
       errors.push('Number must be digits only (0-999)');
     }
+    if (row.size && !validSizes.some(s => s.toLowerCase() === row.size.toLowerCase())) {
+      errors.push(`Size "${row.size}" is invalid for ${g} (expected: ${validSizes.join(', ')})`);
+    }
     return errors;
   }
 
   function addRow(gender = 'Men', size = 'M', name = '', number = '', remarks = '') {
+    const validSizes = getSizesForGender(gender);
+    const resolvedSize = validSizes.includes(size) ? size : validSizes[0];
     personalization = [
       ...personalization,
       {
         id: 'pers_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
         gender,
-        size,
+        size: resolvedSize,
         name,
         number,
         remarks
@@ -69,18 +88,32 @@
       }
 
       // Expected 4 columns: [Gender] [Size] [Name] [Number]
-      let g = cols[0] || 'Men';
-      let s = cols[1] || 'M';
+      let rawGender = cols[0] || 'Men';
+      let rawSize = cols[1] || 'M';
       let n = cols[2] || '';
       let num = cols[3] || '';
 
-      // Auto-correct common gender casing
-      const matchedGender = genders.find(item => item.toLowerCase() === g.toLowerCase());
-      if (matchedGender) g = matchedGender;
+      // Normalize gender with alias mapping
+      let g = 'Men';
+      const gLower = rawGender.toLowerCase().trim();
+      if (gLower === 'infant' || gLower === 'baby') g = 'Infant';
+      else if (gLower === 'kids' || gLower === 'kid' || gLower === 'child' || gLower === 'children') g = 'Kids';
+      else if (gLower === 'jr' || gLower === 'junior') g = 'Jr';
+      else if (gLower === 'women' || gLower === 'woman' || gLower === 'female') g = 'Women';
+      else if (gLower === 'unisex') g = 'Unisex';
+      else if (gLower === 'men' || gLower === 'man' || gLower === 'male') g = 'Men';
+      else {
+        const found = genders.find(item => item.toLowerCase() === gLower);
+        if (found) g = found;
+      }
 
-      // Auto-correct size casing
-      const matchedSize = sizes.find(item => item.toLowerCase() === s.toLowerCase());
-      if (matchedSize) s = matchedSize;
+      // Canonicalize size against gender scale
+      const validSizes = getSizesForGender(g);
+      let s = rawSize.trim();
+      const matchedSize = validSizes.find(item => item.toLowerCase() === s.toLowerCase());
+      if (matchedSize) {
+        s = matchedSize;
+      }
 
       const item = { gender: g, size: s, name: n, number: num, remarks: '' };
       const errs = validateRow(item);
@@ -178,7 +211,16 @@
           {@const hasNumErr = row.number && !reNumeric.test(row.number)}
           <tr>
             <td>
-              <select class="select-control compact" bind:value={row.gender}>
+              <select
+                class="select-control compact"
+                bind:value={row.gender}
+                onchange={() => {
+                  const valid = getSizesForGender(row.gender);
+                  if (!valid.includes(row.size)) {
+                    row.size = valid[0];
+                  }
+                }}
+              >
                 {#each genders as g}
                   <option value={g}>{g}</option>
                 {/each}
@@ -186,7 +228,7 @@
             </td>
             <td>
               <select class="select-control compact" bind:value={row.size}>
-                {#each sizes as s}
+                {#each getSizesForGender(row.gender) as s}
                   <option value={s}>{s}</option>
                 {/each}
               </select>
