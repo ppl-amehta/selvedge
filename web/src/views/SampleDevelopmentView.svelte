@@ -71,7 +71,54 @@
   let whyWeMadeThis = $state('');
   let garmentSpecifications = $state('');
   let composition = $state('');
-  let mrp = $state(999.0);
+  let mrp = $state(1499.0);
+
+  // Per-Gender / Non-Apparel Multi-Image and Color Available Image states
+  let newImgUrlInput = $state({});
+  let newColorNameInput = $state({});
+  let newColorImgInput = $state({});
+
+  // Standard Garment Specifications (Curated for Apparel & Non-Apparel Genres)
+  const standardGarmentSpecsMap = {
+    'Polo': 'Rib collar, 2-3 button placket, side vents, tennis tail, twin needle hem',
+    'T-Shirt': 'Classic crew neck with internal neck tape, short sleeves, twin needle hem',
+    'Round Neck T-Shirt': 'Classic crew neck with internal neck tape, short sleeves, twin needle hem',
+    'V-Neck T-Shirt': 'Reinforced V-neck collar, short sleeves, regular fit',
+    'Henley': '3-button placket, banded crew neck, set-in sleeves',
+    'Hoodie': 'Drawcord adjustable hood, front kangaroo pocket, ribbed cuffs and hem',
+    'Sweatshirt': 'Ribbed crew neck, ribbed cuffs and bottom band, set-in sleeves',
+    'Jacket': 'Full-zip front, mock neck / stand collar, side welt pockets, elasticated cuffs',
+    'Windcheater': 'Water-resistant nylon shell, hooded with elastic drawcord, zip front',
+    'Shorts': 'Elasticated waistband with tubular drawcord, deep side pockets, above-knee cut',
+    'Track Pants': 'Elasticated waistband with drawcord, side zipper pockets, tapered leg',
+    'Joggers': 'Elasticated ribbed waistband, side pockets, articulated knee, ribbed ankle cuffs',
+    'Leggings': 'High-rise wide waistband, 4-way stretch compression, flatlock anti-chafing seams',
+    'Bags': 'Heavy-duty 16oz canvas, reinforced webbing grab handles, zippered main compartment',
+    'Caps': '6-panel structured crown, curved visor, brass buckle adjustable back strap',
+    'Socks': 'Ribbed arch compression band, reinforced cushioned heel and toe',
+    'Water Bottles': 'Double-wall vacuum insulated stainless steel body, leak-proof twist cap',
+    'Towels': '100% cotton terry weave, high-absorbency, double-stitched hems'
+  };
+
+  const standardGarmentSpecsList = [
+    'Rib collar, 2-3 button placket, side vents, tennis tail, twin needle hem',
+    'Classic crew neck with internal neck tape, short sleeves, twin needle hem',
+    'Reinforced V-neck collar, short sleeves, regular fit',
+    '3-button placket, banded crew neck, set-in sleeves',
+    'Drawcord adjustable hood, front kangaroo pocket, ribbed cuffs and hem',
+    'Ribbed crew neck, ribbed cuffs and bottom band, set-in sleeves',
+    'Full-zip front, mock neck / stand collar, side welt pockets, elasticated cuffs',
+    'Water-resistant nylon shell, hooded with elastic drawcord, zip front',
+    'Elasticated waistband with tubular drawcord, deep side pockets, above-knee cut',
+    'Elasticated waistband with drawcord, side zipper pockets, tapered leg',
+    'Elasticated ribbed waistband, side pockets, articulated knee, ribbed ankle cuffs',
+    'High-rise wide waistband, 4-way stretch compression, flatlock anti-chafing seams',
+    'Heavy-duty 16oz canvas, reinforced webbing grab handles, zippered main compartment',
+    '6-panel structured crown, curved visor, brass buckle adjustable back strap',
+    'Ribbed arch compression band, reinforced cushioned heel and toe',
+    'Double-wall vacuum insulated stainless steel body, leak-proof twist cap',
+    '100% cotton terry weave, high-absorbency, double-stitched hems'
+  ];
 
   // Gender variations
   let prodGenders = $state([
@@ -623,13 +670,46 @@
     prodName = tempProductName || '';
     selectedSampleToPull = sampleId;
 
+    // Commercial & Attribute fields (CSV lines 51-54)
+    whyWeMadeThis = productDescription || devComments || whyWeMadeThis || '';
+
+    // Infer composition from primary fabric data
+    if (fabrics && fabrics.length > 0 && fabrics[0].fabricName) {
+      const fNameLower = fabrics[0].fabricName.toLowerCase();
+      const matched = authoritativeCompositions.find(c => fNameLower.includes(c.toLowerCase()));
+      if (matched) {
+        composition = matched;
+      } else {
+        composition = fabrics[0].fabricName;
+      }
+    }
+
+    // Infer garment specifications
+    garmentSpecifications = standardGarmentSpecsMap[productGenre] || standardGarmentSpecsList[0];
+
+    // Infer brand label from sample labels
+    if (labels && labels.length > 0) {
+      const brandObj = (masters.label_brands || []).find(b =>
+        labels.some(l => (l.labelName || '').toLowerCase().includes((b.display_name || b.name || '').toLowerCase()))
+      );
+      if (brandObj) {
+        brandLabel = brandObj.display_name || brandObj.name;
+      }
+    }
+
+    if (!mrp || mrp <= 0) {
+      mrp = 1499.0;
+    }
+
+    const baseImgs = [sampleImageUrl, imageUrl].filter(Boolean);
+
     if (isNonApparel) {
       prodGenders = [{
         id: '',
         gender: 'N/A',
         pharmaNo: pharmas[0]?.basePharmaNo || '',
         measurementChartUrl: tempMeasurementChart || '',
-        productImages: imageUrl ? [imageUrl] : [],
+        productImages: baseImgs,
         colorImages: []
       }];
     } else {
@@ -640,10 +720,19 @@
           id: '',
           gender: g,
           pharmaNo: pharmas[0]?.newPharmaNo || pharmas[0]?.basePharmaNo || '',
-          measurementChartUrl: '',
-          productImages: imageUrl ? [imageUrl] : [],
+          measurementChartUrl: tempMeasurementChart || '',
+          productImages: [...baseImgs],
           colorImages: []
         }));
+      } else {
+        prodGenders = [{
+          id: '',
+          gender: 'Men',
+          pharmaNo: pharmas[0]?.newPharmaNo || pharmas[0]?.basePharmaNo || '',
+          measurementChartUrl: tempMeasurementChart || '',
+          productImages: [...baseImgs],
+          colorImages: []
+        }];
       }
     }
 
@@ -695,7 +784,7 @@
     refreshSKU();
     activeTab = 'product';
     if (window.showToast) {
-      window.showToast('Sample specs transferred to Product Creation!', 'success');
+      window.showToast('Sample specs & attributes transferred to Product Creation!', 'success');
     }
   }
 
@@ -711,14 +800,48 @@
       prodName = s.tempProductName || '';
       selectedSampleToPull = s.id;
 
+      // 1. Pull Product Story (Voice note / dev comments)
+      whyWeMadeThis = s.productDescription || s.devComments || whyWeMadeThis || '';
+
+      // 2. Infer Composition from sample primary fabric data
+      if (s.fabrics && s.fabrics.length > 0 && s.fabrics[0].fabricName) {
+        const fNameLower = s.fabrics[0].fabricName.toLowerCase();
+        const matched = authoritativeCompositions.find(c => fNameLower.includes(c.toLowerCase()));
+        if (matched) {
+          composition = matched;
+        } else {
+          composition = s.fabrics[0].fabricName;
+        }
+      }
+
+      // 3. Infer Garment Specifications
+      garmentSpecifications = standardGarmentSpecsMap[prodGenre] || standardGarmentSpecsList[0];
+
+      // 4. Infer Brand Label from sample labels
+      if (s.labels && s.labels.length > 0) {
+        const brandObj = (masters.label_brands || []).find(b =>
+          s.labels.some(l => (l.labelName || '').toLowerCase().includes((b.display_name || b.name || '').toLowerCase()))
+        );
+        if (brandObj) {
+          brandLabel = brandObj.display_name || brandObj.name;
+        }
+      }
+
+      // 5. Default MRP
+      if (!mrp || mrp <= 0) {
+        mrp = 1499.0;
+      }
+
       const pullIsNonApparel = nonApparelGenres.includes(prodGenre);
+      const baseImgs = [s.sampleImageUrl, s.imageUrl].filter(Boolean);
+
       if (pullIsNonApparel) {
         prodGenders = [{
           id: '',
           gender: 'N/A',
           pharmaNo: s.pharmas?.[0]?.basePharmaNo || '',
           measurementChartUrl: s.tempMeasurementChart || '',
-          productImages: s.sampleImageUrl ? [s.sampleImageUrl] : (s.imageUrl ? [s.imageUrl] : []),
+          productImages: baseImgs,
           colorImages: []
         }];
       } else {
@@ -728,27 +851,60 @@
             id: '',
             gender: g,
             pharmaNo: s.pharmas?.[0]?.newPharmaNo || s.pharmas?.[0]?.basePharmaNo || '',
-            measurementChartUrl: '',
-            productImages: s.sampleImageUrl ? [s.sampleImageUrl] : (s.imageUrl ? [s.imageUrl] : []),
+            measurementChartUrl: s.tempMeasurementChart || '',
+            productImages: [...baseImgs],
             colorImages: []
           }));
+        } else {
+          prodGenders = [{
+            id: '',
+            gender: 'Men',
+            pharmaNo: s.pharmas?.[0]?.newPharmaNo || s.pharmas?.[0]?.basePharmaNo || '',
+            measurementChartUrl: s.tempMeasurementChart || '',
+            productImages: [...baseImgs],
+            colorImages: []
+          }];
         }
       }
 
       const mats = [];
       (s.fabrics || []).forEach(f => {
         if (f.fabricName) {
-          mats.push({ id: '', materialType: 'fabric', name: f.fabricName, average: f.average || 0.35, gsm: 220, dia: 32, zipLengthQty: '' });
+          mats.push({
+            id: '',
+            materialType: 'fabric',
+            name: f.fabricName,
+            average: f.average || (pullIsNonApparel ? 1.0 : 0.35),
+            gsm: 220,
+            dia: 32,
+            zipLengthQty: ''
+          });
         }
       });
       (s.trims || []).forEach(t => {
         if (t.trimName) {
-          mats.push({ id: '', materialType: 'trim', name: t.trimName, average: t.average || 1.0, gsm: 0, dia: 0, zipLengthQty: '' });
+          mats.push({
+            id: '',
+            materialType: 'trim',
+            name: t.trimName,
+            average: t.average || 1.0,
+            gsm: 0,
+            dia: 0,
+            zipLengthQty: ''
+          });
         }
       });
       (s.zips || []).forEach(z => {
         if (z.zipName) {
-          mats.push({ id: '', materialType: 'zip', name: z.zipName, average: 1.0, gsm: 0, dia: 0, zipLengthQty: z.lengthAndQty || '' });
+          mats.push({
+            id: '',
+            materialType: 'zip',
+            name: z.zipName,
+            average: 1.0,
+            gsm: 0,
+            dia: 0,
+            zipLengthQty: z.lengthAndQty || ''
+          });
         }
       });
       if (mats.length > 0) {
@@ -757,7 +913,7 @@
 
       refreshSKU();
       if (window.showToast) {
-        window.showToast(`Imported specs from ${s.developmentNo}`, 'info');
+        window.showToast(`Imported all specs & product attributes from sample ${s.developmentNo}`, 'info');
       }
     } catch (err) {
       alert('Failed to pull from sample: ' + err.message);
@@ -776,6 +932,123 @@
   }
   function removeProductGender(idx) {
     prodGenders = prodGenders.filter((_, i) => i !== idx);
+  }
+
+  // Image & Color Variant Helpers for Product Creation
+  function addGenderProductImage(gIdx) {
+    const url = (newImgUrlInput[gIdx] || '').trim();
+    if (!url) return;
+    if (!prodGenders[gIdx].productImages) prodGenders[gIdx].productImages = [];
+    prodGenders[gIdx].productImages = [...prodGenders[gIdx].productImages, url];
+    newImgUrlInput[gIdx] = '';
+  }
+
+  function removeGenderProductImage(gIdx, imgIdx) {
+    prodGenders[gIdx].productImages = prodGenders[gIdx].productImages.filter((_, i) => i !== imgIdx);
+  }
+
+  function addGenderColorVariant(gIdx) {
+    const name = (newColorNameInput[gIdx] || '').trim();
+    if (!name) return;
+    if (!prodGenders[gIdx].colorImages) prodGenders[gIdx].colorImages = [];
+    prodGenders[gIdx].colorImages = [...prodGenders[gIdx].colorImages, {
+      colorName: name,
+      images: []
+    }];
+    newColorNameInput[gIdx] = '';
+  }
+
+  function removeGenderColorVariant(gIdx, colorIdx) {
+    prodGenders[gIdx].colorImages = prodGenders[gIdx].colorImages.filter((_, i) => i !== colorIdx);
+  }
+
+  function addColorImage(gIdx, colorIdx) {
+    const key = `${gIdx}_${colorIdx}`;
+    const url = (newColorImgInput[key] || '').trim();
+    if (!url) return;
+    const variant = prodGenders[gIdx].colorImages[colorIdx];
+    if (!variant.images) variant.images = [];
+    variant.images = [...variant.images, url];
+    newColorImgInput[key] = '';
+    prodGenders = [...prodGenders];
+  }
+
+  function removeColorImage(gIdx, colorIdx, imgIdx) {
+    prodGenders[gIdx].colorImages[colorIdx].images = prodGenders[gIdx].colorImages[colorIdx].images.filter((_, i) => i !== imgIdx);
+    prodGenders = [...prodGenders];
+  }
+
+  // Load an existing published master product to edit all attribute fields
+  async function selectProductToEdit(productId) {
+    if (!productId) return;
+    try {
+      const p = await api.getMasterProduct(productId);
+      prodId = p.id;
+      prodName = p.productName || '';
+      prodGenre = p.genre || 'Polo';
+      skuCode = p.skuCode || '';
+      brandLabel = p.brandLabel || '';
+      whyWeMadeThis = p.whyWeMadeThis || '';
+      garmentSpecifications = p.garmentSpecifications || standardGarmentSpecsMap[prodGenre] || '';
+      composition = p.composition || '';
+      mrp = p.mrp || 1499.0;
+      selectedSampleToPull = p.sampleDevelopmentId || '';
+      if (p.genders && p.genders.length > 0) {
+        prodGenders = p.genders.map(g => ({
+          id: g.id || '',
+          gender: g.gender || 'Men',
+          pharmaNo: g.pharmaNo || '',
+          measurementChartUrl: g.measurementChartUrl || '',
+          productImages: g.productImages || [],
+          colorImages: g.colorImages || []
+        }));
+      }
+      if (p.materials && p.materials.length > 0) {
+        prodMaterials = p.materials.map(m => ({
+          id: m.id || '',
+          materialType: m.materialType || 'fabric',
+          name: m.name || '',
+          average: m.average || 0.35,
+          gsm: m.gsm || 0,
+          dia: m.dia || 0,
+          zipLengthQty: m.zipLengthQty || ''
+        }));
+      }
+      if (window.showToast) {
+        window.showToast(`Loaded master product "${p.productName}" for editing`, 'info');
+      }
+    } catch (err) {
+      alert('Failed to load master product: ' + err.message);
+    }
+  }
+
+  function resetProductForm() {
+    prodId = '';
+    selectedSampleToPull = '';
+    creationDate = new Date().toISOString().split('T')[0];
+    prodGenre = 'Polo';
+    prodName = '';
+    brandLabel = '';
+    skuCode = '';
+    whyWeMadeThis = '';
+    garmentSpecifications = standardGarmentSpecsMap['Polo'];
+    composition = '100% Cotton';
+    mrp = 1499.0;
+    prodGenders = [{
+      id: '',
+      gender: 'Men',
+      pharmaNo: '',
+      measurementChartUrl: '',
+      productImages: [],
+      colorImages: []
+    }];
+    prodMaterials = [
+      { id: '', materialType: 'fabric', name: '', average: 0.35, gsm: 220, dia: 32, zipLengthQty: '' },
+      { id: '', materialType: 'trim', name: '', average: 3.0, gsm: 0, dia: 0, zipLengthQty: '' }
+    ];
+    if (window.showToast) {
+      window.showToast('Product form reset for new product creation', 'info');
+    }
   }
 
   function addProductMaterial(type) {
@@ -1482,24 +1755,50 @@
     <div class="single-col-container">
       <section class="card">
         <div class="card-header">
-          <span class="badge">Master Specification</span>
-          <h2 class="card-title">Create Master Product from Approved Sample</h2>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span class="badge">Master Specification</span>
+            <h2 class="card-title">
+              {prodId ? `Edit Product: ${prodName}` : 'Create / Edit Master Product & Attribute Specifications'}
+            </h2>
+          </div>
+          <button type="button" class="btn btn-secondary btn-xs" onclick={resetProductForm}>
+            + New Blank Product
+          </button>
         </div>
 
-        <!-- PULL FROM SAMPLE HELPER -->
-        <div class="pull-box">
-          <div class="pull-label">
-            <span class="pull-icon">⚡</span>
-            <span>Import from Approved Sample Development:</span>
+        <!-- PULL FROM SAMPLE & LOAD EXISTING PRODUCT CONTROLS -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+          <!-- 1. Pull from Sample -->
+          <div class="pull-box" style="margin-bottom:0;">
+            <div class="pull-label">
+              <span class="pull-icon">⚡</span>
+              <span>Import Approved Sample:</span>
+            </div>
+            <select class="input pull-select" onchange={handlePullFromSampleChange}>
+              <option value="">-- Select Approved Sample to Pull Specs --</option>
+              {#each sampleList as smp}
+                <option value={smp.id} selected={selectedSampleToPull === smp.id}>
+                  {smp.developmentNo} • {smp.tempProductName} ({smp.clientName}) [{smp.status}]
+                </option>
+              {/each}
+            </select>
           </div>
-          <select class="input pull-select" onchange={handlePullFromSampleChange}>
-            <option value="">-- Choose Approved Sample to Pull Specs --</option>
-            {#each sampleList as smp}
-              <option value={smp.id} selected={selectedSampleToPull === smp.id}>
-                {smp.developmentNo} • {smp.tempProductName} ({smp.clientName}) [{smp.status}]
-              </option>
-            {/each}
-          </select>
+
+          <!-- 2. Edit Existing Master Product -->
+          <div class="pull-box" style="margin-bottom:0;background:rgba(16,185,129,0.06);border-color:rgba(16,185,129,0.25);">
+            <div class="pull-label" style="color:#10b981;">
+              <span class="pull-icon">📝</span>
+              <span>Edit Existing Product:</span>
+            </div>
+            <select class="input pull-select" onchange={(e) => selectProductToEdit(e.target.value)}>
+              <option value="">-- Select Published Product to Edit --</option>
+              {#each productList as p}
+                <option value={p.id} selected={prodId === p.id}>
+                  {p.skuCode || 'SKU'} • {p.productName} [{p.genre}]
+                </option>
+              {/each}
+            </select>
+          </div>
         </div>
 
         <div class="form-grid">
@@ -1585,11 +1884,99 @@
           </div>
         </div>
 
-        <!-- GENDER VARIATIONS / NON-APPAREL PROFILE -->
+        <!-- ============================================================ -->
+        <!-- COMMERCIAL & CATALOG ATTRIBUTES (CSV LINES 51-54)            -->
+        <!-- ============================================================ -->
+        <div class="sub-table-block" style="margin-top: 20px;">
+          <div class="sub-table-header">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span class="sub-title">✨ Commercial & Catalog Specifications (Product Story, Garment Specs, Composition & MRP)</span>
+              <span class="badge" style="background: rgba(59, 130, 246, 0.2); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.4);">
+                CSV Lines 51-54 • 100% Editable
+              </span>
+            </div>
+          </div>
+
+          <div style="padding: 16px;">
+            <div class="form-grid">
+              <!-- Line 51: Why We Made This -->
+              <div class="field-group span-2">
+                <VoiceNoteRecorder
+                  bind:text={whyWeMadeThis}
+                  label="Why We Made This (Product Story & Design Intent) [CSV Line 51]"
+                  placeholder="Voice dictate or type why we made this product, technical performance details, fit story..."
+                  rows={3}
+                />
+                <span class="field-hint" style="font-size: 11px; color: var(--text-tertiary, #94a3b8); margin-top: 4px; display: block;">
+                  Pulls from sample voice description or dev comments. Merchandiser can freely edit or voice-record new story.
+                </span>
+              </div>
+
+              <!-- Line 52: Garment Specifications -->
+              <div class="field-group">
+                <label for="garmentSpecs" style="font-weight: 700; color: #f8fafc;">
+                  Garment Specifications (Dropdown + Custom) [CSV Line 52]
+                </label>
+                <Combobox
+                  items={standardGarmentSpecsList}
+                  bind:value={garmentSpecifications}
+                  placeholder="Select or enter garment specifications..."
+                  allowCustom={true}
+                />
+                <span class="field-hint" style="font-size: 11px; color: var(--text-tertiary, #94a3b8); margin-top: 4px; display: block;">
+                  Select preloaded standard spec for {prodGenre} or type custom spec details.
+                </span>
+              </div>
+
+              <!-- Line 53: Composition -->
+              <div class="field-group">
+                <label for="composition" style="font-weight: 700; color: #f8fafc;">
+                  Composition (22 Authoritative Dropdown Compositions) [CSV Line 53]
+                </label>
+                <Combobox
+                  items={authoritativeCompositions}
+                  bind:value={composition}
+                  placeholder="Select or enter composition (e.g. 60%Cot 40%Poly)..."
+                  allowCustom={true}
+                />
+                <span class="field-hint" style="font-size: 11px; color: var(--text-tertiary, #94a3b8); margin-top: 4px; display: block;">
+                  Auto-inferred from fabric data ({prodMaterials.find(m => m.materialType === 'fabric')?.name || 'No fabric'}), editable via combobox.
+                </span>
+              </div>
+
+              <!-- Line 54: MRP -->
+              <div class="field-group">
+                <label for="mrp" style="font-weight: 700; color: #f8fafc;">
+                  Maximum Retail Price (MRP ₹) [CSV Line 54]
+                </label>
+                <div style="position: relative;">
+                  <span style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #94a3b8; font-weight: 700;">₹</span>
+                  <input
+                    id="mrp"
+                    type="number"
+                    step="1"
+                    min="0"
+                    class="input"
+                    style="padding-left: 28px; font-weight: 700; font-size: 1rem; color: #38bdf8;"
+                    bind:value={mrp}
+                    placeholder="1499"
+                  />
+                </div>
+                <span class="field-hint" style="font-size: 11px; color: var(--text-tertiary, #94a3b8); margin-top: 4px; display: block;">
+                  Standard recommended retail price in INR (editable).
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ============================================================ -->
+        <!-- GENDER VARIATIONS / NON-APPAREL PROFILE                      -->
+        <!-- ============================================================ -->
         {#if isProdNonApparel}
           <div class="sub-table-block" style="margin-top: 20px;">
             <div class="sub-table-header">
-              <span class="sub-title">📦 Non-Apparel Product Profile & Dimensions (No Gender)</span>
+              <span class="sub-title">📦 Non-Apparel Product Profile, Dimensions & Images (No Gender)</span>
             </div>
             <div class="gender-card">
               <div class="gender-sizes-preview" style="padding: 8px 12px; background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; font-size: 12px;">
@@ -1611,12 +1998,84 @@
                   <input id="prodSpecUrl" type="text" class="input" placeholder="e.g. /data/specs/bottle-500.pdf" bind:value={prodGenders[0].measurementChartUrl} />
                 </div>
               </div>
+
+              <!-- Product Images (Non-Apparel) -->
+              <div class="image-management-section">
+                <div class="image-sub-title">
+                  <span>📸 Product Images (Upload Links / Multiple) [CSV Line 36]</span>
+                </div>
+                <div class="img-input-row">
+                  <input
+                    type="text"
+                    class="input table-input"
+                    placeholder="Enter image URL (e.g. /data/uploads/bag_front.jpg)"
+                    bind:value={newImgUrlInput[0]}
+                    onkeydown={(e) => e.key === 'Enter' && addGenderProductImage(0)}
+                  />
+                  <button type="button" class="btn btn-secondary btn-xs" onclick={() => addGenderProductImage(0)}>+ Add Image</button>
+                </div>
+                {#if prodGenders[0]?.productImages && prodGenders[0].productImages.length > 0}
+                  <div class="img-thumbnails-row">
+                    {#each prodGenders[0].productImages as imgUrl, imgIdx}
+                      <div class="img-thumbnail-chip">
+                        <img src={imgUrl} alt="Product view" onerror={(e) => { e.currentTarget.style.display = 'none'; }} />
+                        <button type="button" class="img-remove-btn" onclick={() => removeGenderProductImage(0, imgIdx)} title="Remove image">✕</button>
+                      </div>
+                    {/each}
+                  </div>
+                {/if}
+
+                <!-- Color Available Images (Non-Apparel Finishes) -->
+                <div class="image-sub-title" style="margin-top: 14px;">
+                  <span>🎨 Color / Finish Available Images (Front, Back, Side) [CSV Line 37]</span>
+                </div>
+                <div class="img-input-row">
+                  <input
+                    type="text"
+                    class="input table-input"
+                    placeholder="New Finish / Color Name (e.g. Matte Black, Brushed Silver)"
+                    bind:value={newColorNameInput[0]}
+                    onkeydown={(e) => e.key === 'Enter' && addGenderColorVariant(0)}
+                  />
+                  <button type="button" class="btn btn-secondary btn-xs" onclick={() => addGenderColorVariant(0)}>+ Add Color Variant</button>
+                </div>
+                {#if prodGenders[0]?.colorImages && prodGenders[0].colorImages.length > 0}
+                  {#each prodGenders[0].colorImages as colorVar, cIdx}
+                    <div class="color-variant-box">
+                      <div class="color-variant-header">
+                        <span class="color-badge">{colorVar.colorName}</span>
+                        <button type="button" class="del-btn" onclick={() => removeGenderColorVariant(0, cIdx)}>✕ Remove Color</button>
+                      </div>
+                      <div class="img-input-row">
+                        <input
+                          type="text"
+                          class="input table-input"
+                          placeholder="Add image URL for {colorVar.colorName} (front, back, side)"
+                          bind:value={newColorImgInput[`0_${cIdx}`]}
+                          onkeydown={(e) => e.key === 'Enter' && addColorImage(0, cIdx)}
+                        />
+                        <button type="button" class="btn btn-secondary btn-xs" onclick={() => addColorImage(0, cIdx)}>+ Add View</button>
+                      </div>
+                      {#if colorVar.images && colorVar.images.length > 0}
+                        <div class="img-thumbnails-row" style="margin-bottom: 0;">
+                          {#each colorVar.images as cImg, cImgIdx}
+                            <div class="img-thumbnail-chip">
+                              <img src={cImg} alt="{colorVar.colorName} view" onerror={(e) => { e.currentTarget.style.display = 'none'; }} />
+                              <button type="button" class="img-remove-btn" onclick={() => removeColorImage(0, cIdx, cImgIdx)}>✕</button>
+                            </div>
+                          {/each}
+                        </div>
+                      {/if}
+                    </div>
+                  {/each}
+                {/if}
+              </div>
             </div>
           </div>
         {:else}
           <div class="sub-table-block" style="margin-top: 20px;">
             <div class="sub-table-header">
-              <span class="sub-title">Gender Variations, Pharma No & Images</span>
+              <span class="sub-title">Gender Variations, Pharma No, Measurements & Images</span>
               <button type="button" class="btn btn-secondary btn-xs" onclick={addProductGender}>+ Add Gender</button>
             </div>
 
@@ -1646,23 +2105,97 @@
 
                 <div class="form-grid" style="margin-top: 10px;">
                   <div class="field-group">
-                    <label for="pharmaNo-{idx}">Pharma No (diff for gender)</label>
+                    <label for="pharmaNo-{idx}">Pharma No (diff for gender) [CSV Line 40]</label>
                     <input id="pharmaNo-{idx}" type="text" class="input" placeholder="e.g. PH-M-POLO-2026" bind:value={g.pharmaNo} />
                   </div>
                   <div class="field-group">
-                    <label for="measChart-{idx}">Measurement Chart Upload / Link</label>
+                    <label for="measChart-{idx}">Measurement Chart Upload / Link [CSV Line 41]</label>
                     <input id="measChart-{idx}" type="text" class="input" placeholder="e.g. /data/uploads/chart.pdf" bind:value={g.measurementChartUrl} />
                   </div>
+                </div>
+
+                <!-- Product Images (diff for gender, upload links ..multiple) [CSV Line 36] -->
+                <div class="image-management-section">
+                  <div class="image-sub-title">
+                    <span>📸 Product Images for {g.gender} (Multiple Links) [CSV Line 36]</span>
+                  </div>
+                  <div class="img-input-row">
+                    <input
+                      type="text"
+                      class="input table-input"
+                      placeholder="Image URL for {g.gender} (e.g. /data/uploads/{g.gender.toLowerCase()}_polo_front.jpg)"
+                      bind:value={newImgUrlInput[idx]}
+                      onkeydown={(e) => e.key === 'Enter' && addGenderProductImage(idx)}
+                    />
+                    <button type="button" class="btn btn-secondary btn-xs" onclick={() => addGenderProductImage(idx)}>+ Add Image</button>
+                  </div>
+                  {#if g.productImages && g.productImages.length > 0}
+                    <div class="img-thumbnails-row">
+                      {#each g.productImages as imgUrl, imgIdx}
+                        <div class="img-thumbnail-chip">
+                          <img src={imgUrl} alt="{g.gender} product view" onerror={(e) => { e.currentTarget.style.display = 'none'; }} />
+                          <button type="button" class="img-remove-btn" onclick={() => removeGenderProductImage(idx, imgIdx)} title="Remove image">✕</button>
+                        </div>
+                      {/each}
+                    </div>
+                  {/if}
+
+                  <!-- Color Available Images (diff for gender, multiple per color: front, back, side) [CSV Line 37] -->
+                  <div class="image-sub-title" style="margin-top: 14px;">
+                    <span>🎨 Color Available Images for {g.gender} (Front, Back, Side) [CSV Line 37]</span>
+                  </div>
+                  <div class="img-input-row">
+                    <input
+                      type="text"
+                      class="input table-input"
+                      placeholder="Add Color Variant for {g.gender} (e.g. Navy Blue, Heather Grey, White)"
+                      bind:value={newColorNameInput[idx]}
+                      onkeydown={(e) => e.key === 'Enter' && addGenderColorVariant(idx)}
+                    />
+                    <button type="button" class="btn btn-secondary btn-xs" onclick={() => addGenderColorVariant(idx)}>+ Add Color</button>
+                  </div>
+                  {#if g.colorImages && g.colorImages.length > 0}
+                    {#each g.colorImages as colorVar, cIdx}
+                      <div class="color-variant-box">
+                        <div class="color-variant-header">
+                          <span class="color-badge">{colorVar.colorName}</span>
+                          <button type="button" class="del-btn" onclick={() => removeGenderColorVariant(idx, cIdx)}>✕ Remove Color</button>
+                        </div>
+                        <div class="img-input-row">
+                          <input
+                            type="text"
+                            class="input table-input"
+                            placeholder="Add {colorVar.colorName} image URL (front, back, side)"
+                            bind:value={newColorImgInput[`${idx}_${cIdx}`]}
+                            onkeydown={(e) => e.key === 'Enter' && addColorImage(idx, cIdx)}
+                          />
+                          <button type="button" class="btn btn-secondary btn-xs" onclick={() => addColorImage(idx, cIdx)}>+ Add View</button>
+                        </div>
+                        {#if colorVar.images && colorVar.images.length > 0}
+                          <div class="img-thumbnails-row" style="margin-bottom: 0;">
+                            {#each colorVar.images as cImg, cImgIdx}
+                              <div class="img-thumbnail-chip">
+                                <img src={cImg} alt="{g.gender} {colorVar.colorName} view" onerror={(e) => { e.currentTarget.style.display = 'none'; }} />
+                                <button type="button" class="img-remove-btn" onclick={() => removeColorImage(idx, cIdx, cImgIdx)}>✕</button>
+                              </div>
+                            {/each}
+                          </div>
+                        {/if}
+                      </div>
+                    {/each}
+                  {/if}
                 </div>
               </div>
             {/each}
           </div>
         {/if}
 
-        <!-- COMPONENT MATERIALS BOM -->
+        <!-- ============================================================ -->
+        <!-- COMPONENT MATERIALS BOM (CSV LINES 42-49)                    -->
+        <!-- ============================================================ -->
         <div class="sub-table-block" style="margin-top: 20px;">
           <div class="sub-table-header">
-            <span class="sub-title">Component Materials BOM (Fabrics, Trims & Zips)</span>
+            <span class="sub-title">Component Materials BOM (Fabrics, Trims & Zips) [CSV Lines 42-49]</span>
             <div style="display:flex;gap:8px;">
               <button type="button" class="btn btn-secondary btn-xs" onclick={() => addProductMaterial('fabric')}>+ Fabric</button>
               <button type="button" class="btn btn-secondary btn-xs" onclick={() => addProductMaterial('trim')}>+ Trim</button>
@@ -1732,51 +2265,6 @@
               {/each}
             </tbody>
           </table>
-        </div>
-
-        <!-- COMMERCIALS & SPECS -->
-        <div class="form-grid" style="margin-top: 20px;">
-          <div class="field-group span-2">
-            <label for="whyMade">Why We Made This (Product Story)</label>
-            <textarea
-              id="whyMade"
-              class="input"
-              rows="2"
-              placeholder="e.g. Engineered for extreme durability with breathable pique knit and reinforced seams..."
-              bind:value={whyWeMadeThis}
-            ></textarea>
-          </div>
-
-          <div class="field-group">
-            <label for="garmentSpecs">Garment Specifications</label>
-            <input
-              id="garmentSpecs"
-              type="text"
-              class="input"
-              placeholder="e.g. Rib collar, 3-button placket, side vents"
-              bind:value={garmentSpecifications}
-            />
-          </div>
-
-          <div class="field-group">
-            <label for="composition">Composition (22 Authoritative Compositions)</label>
-            <Combobox
-              items={authoritativeCompositions}
-              bind:value={composition}
-              placeholder="Select or enter composition (e.g. 60%Cot 40%Poly)..."
-            />
-          </div>
-
-          <div class="field-group">
-            <label for="mrp">Maximum Retail Price (MRP ₹)</label>
-            <input
-              id="mrp"
-              type="number"
-              step="1"
-              class="input"
-              bind:value={mrp}
-            />
-          </div>
         </div>
 
         <!-- PUBLISH ACTION -->
@@ -2498,6 +2986,103 @@
 
   .sub-table-block.dimmed {
     opacity: 0.8;
+  }
+
+  /* PRODUCT CREATION IMAGES & COLOR VARIANT STYLING */
+  .image-management-section {
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .image-sub-title {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: #38bdf8;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .img-input-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+
+  .img-thumbnails-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+
+  .img-thumbnail-chip {
+    position: relative;
+    width: 64px;
+    height: 64px;
+    border-radius: 6px;
+    overflow: hidden;
+    border: 1px solid rgba(59, 130, 246, 0.4);
+    background: #090d16;
+  }
+
+  .img-thumbnail-chip img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .img-remove-btn {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: rgba(239, 68, 68, 0.9);
+    color: white;
+    border: none;
+    cursor: pointer;
+    font-size: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    transition: background 0.15s ease;
+  }
+
+  .img-remove-btn:hover {
+    background: #dc2626;
+  }
+
+  .color-variant-box {
+    background: rgba(15, 23, 42, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 6px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+  }
+
+  .color-variant-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+
+  .color-badge {
+    font-size: 11px;
+    font-weight: 700;
+    color: #f8fafc;
+    background: rgba(59, 130, 246, 0.2);
+    padding: 2px 8px;
+    border-radius: 4px;
+    border: 1px solid rgba(59, 130, 246, 0.35);
   }
 
   @media (max-width: 1080px) {
