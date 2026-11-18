@@ -63,7 +63,7 @@
     // 2. Fetch System Health & Masters
     try {
       const health = await api.health();
-      isOnline = health.status === 'ok';
+      isOnline = health.status === 'healthy' || health.status === 'ok';
 
       const data = await api.getMasters();
       masters = data;

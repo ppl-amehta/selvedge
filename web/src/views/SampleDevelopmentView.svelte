@@ -910,7 +910,13 @@
                 {#each zips as zp, idx}
                   <tr>
                     <td>
-                      <input type="text" class="input table-input" bind:value={zp.zipName} placeholder="e.g. YKK #3 Concealed Nylon" />
+                      <Combobox
+                        items={masters.zip_types || masters.zips || []}
+                        bind:value={zp.zipName}
+                        displayKey="display_name"
+                        valueKey="display_name"
+                        placeholder="Select zip (Nylon, Vislon, Brass)..."
+                      />
                     </td>
                     <td>
                       <input type="text" class="input table-input" bind:value={zp.lengthAndQty} placeholder="e.g. S-L: 15cm (1pc), XL: 18cm (1pc)" />
@@ -1325,7 +1331,33 @@
                     <span class="type-pill {m.materialType}">{m.materialType.toUpperCase()}</span>
                   </td>
                   <td>
-                    <input type="text" class="input table-input" bind:value={m.name} placeholder="Material name" />
+                    {#if m.materialType === 'fabric'}
+                      <Combobox
+                        items={masters.fabrics || []}
+                        bind:value={m.name}
+                        displayKey="display_name"
+                        valueKey="display_name"
+                        placeholder="Select fabric..."
+                      />
+                    {:else if m.materialType === 'trim'}
+                      <Combobox
+                        items={masters.trims || []}
+                        bind:value={m.name}
+                        displayKey="display_name"
+                        valueKey="display_name"
+                        placeholder="Select trim..."
+                      />
+                    {:else if m.materialType === 'zip'}
+                      <Combobox
+                        items={masters.zip_types || masters.zips || []}
+                        bind:value={m.name}
+                        displayKey="display_name"
+                        valueKey="display_name"
+                        placeholder="Select zip..."
+                      />
+                    {:else}
+                      <input type="text" class="input table-input" bind:value={m.name} placeholder="Material name" />
+                    {/if}
                   </td>
                   <td>
                     <input type="number" step="0.01" class="input table-input" bind:value={m.average} />
@@ -1743,8 +1775,10 @@
     margin-top: 16px;
     border: 1px solid var(--border-color, #334155);
     border-radius: 8px;
-    overflow: hidden;
+    overflow: visible;
     background: var(--bg-surface, #0f172a);
+    position: relative;
+    z-index: 10;
   }
 
   .sub-table-header {
@@ -1766,7 +1800,8 @@
 
   .data-table {
     width: 100%;
-    border-collapse: collapse;
+    border-collapse: separate;
+    border-spacing: 0;
     font-size: 0.85rem;
   }
 
@@ -1778,17 +1813,57 @@
     color: var(--text-secondary, #94a3b8);
     text-align: left;
     border-bottom: 1px solid var(--border-color, #334155);
-    background: rgba(0, 0, 0, 0.15);
+    background: rgba(0, 0, 0, 0.2);
   }
 
   .data-table td {
     padding: 6px 10px;
     border-bottom: 1px solid var(--border-color, #1e293b);
+    position: relative;
+    overflow: visible;
   }
 
   .table-input {
-    padding: 5px 8px;
+    padding: 6px 10px;
     font-size: 0.82rem;
+  }
+
+  /* NATIVE SELECT ACCESSIBILITY & VISIBILITY STYLING */
+  select.input, select.table-input, select.pull-select {
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2338bdf8' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    background-size: 14px;
+    padding-right: 32px;
+    cursor: pointer;
+    color-scheme: dark;
+    background-color: var(--bg-input, #0f172a);
+    color: var(--text-primary, #f8fafc);
+    border: 1px solid var(--border-color, #334155);
+  }
+
+  select.input:focus, select.table-input:focus, select.pull-select:focus {
+    border-color: var(--accent-primary, #3b82f6);
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
+  }
+
+  select.input option, select.table-input option, select.pull-select option {
+    background-color: #1e293b;
+    color: #f8fafc;
+    padding: 10px 14px;
+    font-size: 13px;
+  }
+
+  select.input optgroup, select.table-input optgroup, select.pull-select optgroup {
+    background-color: #0f172a;
+    color: #38bdf8;
+    font-weight: 700;
+    padding: 8px 10px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
   }
 
   .del-btn {

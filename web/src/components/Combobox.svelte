@@ -4,7 +4,7 @@
   let {
     value = $bindable(''),
     category = 'item',
-    placeholder = 'Type to search or add new...',
+    placeholder = 'Type to search or select...',
     items = [],
     options = null,
     displayKey = 'display_name',
@@ -15,9 +15,15 @@
   } = $props();
 
   let isOpen = $state(false);
+  let isFiltering = $state(false);
   let highlightedIndex = $state(-1);
-  let inputEl;
+  let isRegistering = $state(false);
+  let inputEl = $state(null);
+  let wrapperEl = $state(null);
   let dropdownEl = $state(null);
+  let dropdownPos = $state({ top: 0, left: 0, width: 240, flipUp: false });
+
+  let safeVal = $derived(value ?? '');
 
   // Normalize items/options supporting strings, {label, value}, or master objects
   let normalizedList = $derived.by(() => {
@@ -40,35 +46,130 @@
 
   // Filtered options based on user typing
   let filteredItems = $derived.by(() => {
-    const q = (value || '').toLowerCase().trim();
-    if (!q) return normalizedList.slice(0, 50);
+    if (!isFiltering) {
+      return normalizedList.slice(0, 150);
+    }
+    const q = safeVal.toLowerCase().trim();
+    if (!q) return normalizedList.slice(0, 150);
     return normalizedList.filter(item => {
       const text = item.display_name.toLowerCase();
       const code = (item.code || '').toLowerCase();
       const val = item.value.toLowerCase();
       const gstin = (item.gstin || '').toLowerCase();
       return text.includes(q) || code.includes(q) || val.includes(q) || gstin.includes(q);
-    }).slice(0, 50);
+    }).slice(0, 150);
   });
 
   let exactMatch = $derived.by(() => {
-    const trimmed = (value || '').toLowerCase().trim();
+    const trimmed = safeVal.toLowerCase().trim();
     return normalizedList.some(i => i.display_name.toLowerCase() === trimmed || i.value.toLowerCase() === trimmed);
   });
+
+  function updatePosition() {
+    if (!inputEl) return;
+    const rect = inputEl.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const estimatedHeight = 260;
+    const flipUp = spaceBelow < estimatedHeight && rect.top > estimatedHeight;
+    dropdownPos = {
+      top: flipUp ? Math.max(8, rect.top - estimatedHeight - 4) : rect.bottom + 4,
+      left: Math.max(8, Math.min(rect.left, window.innerWidth - 360)),
+      width: Math.max(rect.width, 240),
+      flipUp
+    };
+  }
+
+  // Click outside to dismiss dropdown reliably without blur races
+  $effect(() => {
+    if (typeof document === 'undefined') return;
+    function handlePointerDown(e) {
+      if (
+        wrapperEl && !wrapperEl.contains(e.target) &&
+        dropdownEl && !dropdownEl.contains(e.target)
+      ) {
+        isOpen = false;
+        isFiltering = false;
+      }
+    }
+    function handleScrollOrResize() {
+      if (isOpen) updatePosition();
+    }
+    if (isOpen) {
+      updatePosition();
+      document.addEventListener('pointerdown', handlePointerDown, true);
+      window.addEventListener('scroll', handleScrollOrResize, true);
+      window.addEventListener('resize', handleScrollOrResize, true);
+    }
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown, true);
+      window.removeEventListener('scroll', handleScrollOrResize, true);
+      window.removeEventListener('resize', handleScrollOrResize, true);
+    };
+  });
+
+  // Scroll highlighted item into view
+  $effect(() => {
+    if (isOpen && dropdownEl && highlightedIndex >= 0) {
+      const el = dropdownEl.querySelector('.highlighted');
+      if (el) el.scrollIntoView({ block: 'nearest' });
+    }
+  });
+
+  function openDropdown(enableFilter = false) {
+    updatePosition();
+    isOpen = true;
+    isFiltering = enableFilter;
+    if (normalizedList.length > 0) {
+      const idx = normalizedList.findIndex(i => i.value === safeVal || i.display_name === safeVal);
+      highlightedIndex = idx >= 0 ? idx : 0;
+    }
+  }
+
+  function toggleDropdown() {
+    if (isOpen) {
+      isOpen = false;
+      isFiltering = false;
+    } else {
+      openDropdown(false);
+      inputEl?.focus();
+    }
+  }
+
+  function handleInput(e) {
+    value = e.target.value;
+    isFiltering = true;
+    updatePosition();
+    isOpen = true;
+    highlightedIndex = 0;
+  }
+
+  function handleFocus() {
+    openDropdown(false);
+  }
 
   function selectOption(item) {
     const val = item.value || item.display_name || '';
     value = val;
     isOpen = false;
+    isFiltering = false;
     highlightedIndex = -1;
     onSelect(item);
   }
 
+  function clearSelection(e) {
+    e.stopPropagation();
+    value = '';
+    isFiltering = false;
+    openDropdown(false);
+    inputEl?.focus();
+  }
+
   async function handleRegisterNew() {
-    const term = value.trim();
-    if (!term) return;
+    const term = safeVal.trim();
+    if (!term || isRegistering) return;
 
     try {
+      isRegistering = true;
       const res = await api.registerMaster(category, term);
       const newItem = {
         id: res.id,
@@ -77,9 +178,9 @@
         name: res.display_name || res.name || term,
         code: res.code || term
       };
-      if (options) {
+      if (options && Array.isArray(options)) {
         options.push(newItem);
-      } else {
+      } else if (items && Array.isArray(items)) {
         items.push(newItem);
       }
       selectOption(newItem);
@@ -90,13 +191,15 @@
       if (window.showToast) {
         window.showToast(`Failed to register ${category}: ${err.message}`, 'error');
       }
+    } finally {
+      isRegistering = false;
     }
   }
 
   function handleKeydown(e) {
     if (!isOpen) {
       if (e.key === 'ArrowDown' || e.key === 'Enter') {
-        isOpen = true;
+        openDropdown(false);
       }
       return;
     }
@@ -111,22 +214,17 @@
       e.preventDefault();
       if (highlightedIndex >= 0 && filteredItems[highlightedIndex]) {
         selectOption(filteredItems[highlightedIndex]);
-      } else if (allowCustom && value.trim() && !exactMatch) {
+      } else if (allowCustom && safeVal.trim() && !exactMatch) {
         handleRegisterNew();
       }
     } else if (e.key === 'Escape') {
       isOpen = false;
+      isFiltering = false;
     }
-  }
-
-  function handleBlur() {
-    setTimeout(() => {
-      isOpen = false;
-    }, 200);
   }
 </script>
 
-<div class="combobox-wrapper">
+<div class="combobox-wrapper" class:is-open={isOpen} bind:this={wrapperEl}>
   <div class="input-wrap">
     <input
       type="text"
@@ -135,39 +233,61 @@
       {placeholder}
       {disabled}
       bind:value={value}
-      onfocus={() => isOpen = true}
-      onblur={handleBlur}
+      onfocus={handleFocus}
+      oninput={handleInput}
       onkeydown={handleKeydown}
       autocomplete="off"
+      aria-expanded={isOpen}
+      aria-haspopup="listbox"
     />
-    <button
-      type="button"
-      class="toggle-btn"
-      tabindex="-1"
-      onclick={() => {
-        isOpen = !isOpen;
-        if (isOpen) inputEl?.focus();
-      }}
-    >
-      ▾
-    </button>
+    <div class="actions-wrap">
+      {#if safeVal && !disabled}
+        <button
+          type="button"
+          class="clear-btn"
+          tabindex="-1"
+          onclick={clearSelection}
+          title="Clear"
+        >
+          ✕
+        </button>
+      {/if}
+      <button
+        type="button"
+        class="toggle-btn"
+        tabindex="-1"
+        onclick={toggleDropdown}
+        title="Toggle choices"
+      >
+        ▾
+      </button>
+    </div>
   </div>
 
   {#if isOpen}
-    <div class="combobox-dropdown" bind:this={dropdownEl} role="listbox">
-      {#if filteredItems.length === 0 && !value.trim()}
-        <div class="combobox-empty">No items available</div>
+    <div
+      class="combobox-dropdown"
+      bind:this={dropdownEl}
+      role="listbox"
+      style="top: {dropdownPos.top}px; left: {dropdownPos.left}px; width: {dropdownPos.width}px;"
+    >
+      {#if filteredItems.length === 0 && !safeVal.trim()}
+        <div class="combobox-empty">No options found</div>
+      {:else if filteredItems.length === 0}
+        <div class="combobox-empty">No matching options for "{safeVal.trim()}"</div>
       {:else}
-        {#each filteredItems as item, idx}
+        {#each filteredItems as item, idx (item.value || item.display_name || idx)}
+          {@const isSelected = item.value === safeVal || item.display_name === safeVal}
           <div
             class="combobox-item"
             class:highlighted={idx === highlightedIndex}
-            onmousedown={() => selectOption(item)}
+            class:selected={isSelected}
+            onclick={() => selectOption(item)}
             role="option"
-            aria-selected={idx === highlightedIndex}
+            aria-selected={isSelected}
             tabindex="-1"
           >
-            <span>{item.display_name}</span>
+            <span class="item-text">{item.display_name}</span>
             {#if item.code && item.code !== item.display_name}
               <span class="item-meta">{item.code}</span>
             {:else if item.gstin}
@@ -177,9 +297,16 @@
         {/each}
       {/if}
 
-      {#if allowCustom && value.trim() && !exactMatch}
-        <div class="combobox-add-new" onmousedown={handleRegisterNew} role="button" tabindex="0">
-          <span>+ Register <strong>"{value.trim()}"</strong> as new {category}</span>
+      {#if allowCustom && safeVal.trim() && !exactMatch}
+        <div
+          class="combobox-add-new"
+          class:disabled={isRegistering}
+          onclick={handleRegisterNew}
+          role="button"
+          tabindex="0"
+          onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && handleRegisterNew()}
+        >
+          <span>{isRegistering ? 'Registering...' : `+ Register "${safeVal.trim()}" as new ${category}`}</span>
         </div>
       {/if}
     </div>
@@ -196,62 +323,124 @@
     position: relative;
     display: flex;
     align-items: center;
+    width: 100%;
   }
 
   .input-wrap input {
-    padding-right: 32px;
+    width: 100%;
+    padding-right: 52px;
+    background-color: var(--bg-input, #0f172a);
+    color: var(--text-primary, #f8fafc);
+    border: 1px solid var(--border-color, #334155);
+    border-radius: 6px;
+    font-size: 0.85rem;
+    box-sizing: border-box;
+  }
+
+  .input-wrap input:focus {
+    outline: none;
+    border-color: var(--accent-primary, #3b82f6);
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
+  }
+
+  .actions-wrap {
+    position: absolute;
+    right: 6px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    align-items: center;
+    gap: 2px;
+  }
+
+  .clear-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-tertiary, #94a3b8);
+    cursor: pointer;
+    padding: 3px 6px;
+    font-size: 10px;
+    border-radius: 4px;
+    line-height: 1;
+    transition: color 0.15s ease, background-color 0.15s ease;
+  }
+
+  .clear-btn:hover {
+    color: #ef4444;
+    background: rgba(239, 68, 68, 0.15);
   }
 
   .toggle-btn {
-    position: absolute;
-    right: 8px;
     background: transparent;
     border: none;
-    color: var(--text-subtle);
+    color: var(--text-tertiary, #94a3b8);
     cursor: pointer;
-    padding: 4px;
+    padding: 4px 6px;
     font-size: 11px;
-    transition: color 0.15s ease;
+    border-radius: 4px;
+    line-height: 1;
+    transition: color 0.15s ease, background-color 0.15s ease;
   }
 
   .toggle-btn:hover {
-    color: var(--text-main);
+    color: var(--text-primary, #f8fafc);
+    background: rgba(255, 255, 255, 0.08);
   }
 
   .combobox-dropdown {
-    position: absolute;
-    top: calc(100% + 4px);
-    left: 0;
-    right: 0;
-    background-color: var(--bg-surface);
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius-md);
-    max-height: 240px;
+    position: fixed;
+    max-width: min(440px, 90vw);
+    background-color: var(--bg-surface, #1e293b);
+    border: 1px solid var(--accent-primary, #3b82f6);
+    border-radius: 8px;
+    max-height: 260px;
     overflow-y: auto;
-    z-index: 200;
-    box-shadow: var(--shadow-panel);
+    z-index: 100000;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6), 0 4px 12px rgba(0, 0, 0, 0.3);
   }
 
   .combobox-item {
-    padding: 8px 14px;
+    padding: 9px 14px;
     cursor: pointer;
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 12px;
     font-size: 13px;
-    color: var(--text-main);
-    transition: background-color 0.1s ease;
+    color: var(--text-primary, #f8fafc);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    transition: background-color 0.1s ease, color 0.1s ease;
+  }
+
+  .combobox-item:last-child {
+    border-bottom: none;
   }
 
   .combobox-item:hover, .combobox-item.highlighted {
-    background-color: var(--accent-primary);
+    background-color: var(--accent-primary, #2563eb);
     color: #ffffff;
+  }
+
+  .combobox-item.selected {
+    font-weight: 700;
+    color: var(--accent-primary, #60a5fa);
+  }
+
+  .combobox-item:hover.selected, .combobox-item.highlighted.selected {
+    color: #ffffff;
+  }
+
+  .item-text {
+    flex: 1;
+    white-space: normal;
+    word-break: break-word;
   }
 
   .item-meta {
     font-size: 11px;
-    color: var(--text-subtle);
-    font-family: var(--font-mono);
+    color: var(--text-tertiary, #94a3b8);
+    font-family: var(--font-mono, monospace);
+    white-space: nowrap;
   }
 
   .combobox-item:hover .item-meta, .combobox-item.highlighted .item-meta {
@@ -259,22 +448,29 @@
   }
 
   .combobox-empty {
-    padding: 12px 14px;
+    padding: 14px 16px;
     font-size: 12px;
-    color: var(--text-subtle);
+    color: var(--text-tertiary, #94a3b8);
+    text-align: center;
+    font-style: italic;
   }
 
   .combobox-add-new {
     padding: 10px 14px;
-    background-color: rgba(16, 185, 129, 0.1);
-    border-top: 1px solid var(--border-subtle);
-    color: var(--accent-emerald);
+    background-color: rgba(16, 185, 129, 0.15);
+    border-top: 1px solid rgba(16, 185, 129, 0.3);
+    color: #10b981;
     cursor: pointer;
     font-weight: 700;
     font-size: 12px;
   }
 
   .combobox-add-new:hover {
-    background-color: rgba(16, 185, 129, 0.2);
+    background-color: rgba(16, 185, 129, 0.25);
+  }
+
+  .combobox-add-new.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 </style>
