@@ -45,31 +45,35 @@ type SampleSizeItem struct {
 }
 
 type SampleFabricItem struct {
-	ID         string  `json:"id"`
-	FabricName string  `json:"fabricName"`
-	LotNo      string  `json:"lotNo"`
-	Average    float64 `json:"average"`
-	Sequence   int     `json:"sequence"`
+	ID         string         `json:"id"`
+	FabricName string         `json:"fabricName"`
+	LotNo      string         `json:"lotNo"`
+	Average    float64        `json:"average"`
+	Attrs      map[string]any `json:"attrs,omitempty"`
+	Sequence   int            `json:"sequence"`
 }
 
 type SampleTrimItem struct {
-	ID       string  `json:"id"`
-	TrimName string  `json:"trimName"`
-	Average  float64 `json:"average"`
-	Sequence int     `json:"sequence"`
+	ID       string         `json:"id"`
+	TrimName string         `json:"trimName"`
+	Average  float64        `json:"average"`
+	Attrs    map[string]any `json:"attrs,omitempty"`
+	Sequence int            `json:"sequence"`
 }
 
 type SampleZipItem struct {
-	ID            string `json:"id"`
-	ZipName       string `json:"zipName"`
-	LengthAndQty  string `json:"lengthAndQty"`
-	Sequence      int    `json:"sequence"`
+	ID           string         `json:"id"`
+	ZipName      string         `json:"zipName"`
+	LengthAndQty string         `json:"lengthAndQty"`
+	Attrs        map[string]any `json:"attrs,omitempty"`
+	Sequence     int            `json:"sequence"`
 }
 
 type SampleLabelItem struct {
-	ID        string `json:"id"`
-	LabelName string `json:"labelName"`
-	Sequence  int    `json:"sequence"`
+	ID        string         `json:"id"`
+	LabelName string         `json:"labelName"`
+	Attrs     map[string]any `json:"attrs,omitempty"`
+	Sequence  int            `json:"sequence"`
 }
 
 type SamplePharmaItem struct {
@@ -88,6 +92,7 @@ type SampleDevelopmentPayload struct {
 	ClientName           string             `json:"clientName"`
 	ProductGenre         string             `json:"productGenre"`
 	TempProductName      string             `json:"tempProductName"`
+	Colors               []string           `json:"colors,omitempty"`
 	ImageURL             string             `json:"imageUrl"`
 	ProductDescription   string             `json:"productDescription"`
 	TempMeasurementChart string             `json:"tempMeasurementChart"`
@@ -132,13 +137,15 @@ type SampleDevelopmentSummary struct {
 // -------------------------------------------------------------
 
 type ProductGenderItem struct {
-	ID                  string `json:"id"`
-	Gender              string `json:"gender"`
-	PharmaNo            string `json:"pharmaNo"`
-	MeasurementChartURL string `json:"measurementChartUrl"`
-	ProductImages       []string `json:"productImages"`
+	ID                  string           `json:"id"`
+	Gender              string           `json:"gender"`
+	Sizes               []string         `json:"sizes"`
+	PharmaNo            string           `json:"pharmaNo"`
+	PharmaNos           []string         `json:"pharmaNos"`
+	MeasurementChartURL string           `json:"measurementChartUrl"`
+	ProductImages       []string         `json:"productImages"`
 	ColorImages         []map[string]any `json:"colorImages"`
-	Sequence            int `json:"sequence"`
+	Sequence            int              `json:"sequence"`
 }
 
 type ProductMaterialItem struct {
@@ -276,20 +283,39 @@ func (s *Service) CreateSampleDevelopment(payload SampleDevelopmentPayload) (map
 
 	nowMs := graph.NowMs()
 
+	nonNilStrs := func(in []string) []string {
+		if in == nil {
+			return []string{}
+		}
+		return in
+	}
+	colorsBytes, _ := json.Marshal(nonNilStrs(payload.Colors))
+	marshalAttrs := func(m map[string]any) string {
+		if len(m) == 0 {
+			return "{}"
+		}
+		b, err := json.Marshal(m)
+		if err != nil {
+			return "{}"
+		}
+		return string(b)
+	}
+
 	// Upsert sample_developments
 	sampleQuery := `
 		INSERT INTO sample_developments (
 			id, development_no, development_date, client_id, client_name,
-			product_genre, temp_product_name, image_url, product_description,
+			product_genre, temp_product_name, colors_json, image_url, product_description,
 			temp_measurement_chart, dev_comments, masters_comments, rework_notes,
 			sample_image_url, comments, status, meta_json, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '{}', ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '{}', ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			development_date = excluded.development_date,
 			client_id = excluded.client_id,
 			client_name = excluded.client_name,
 			product_genre = excluded.product_genre,
 			temp_product_name = excluded.temp_product_name,
+			colors_json = excluded.colors_json,
 			image_url = excluded.image_url,
 			product_description = excluded.product_description,
 			temp_measurement_chart = excluded.temp_measurement_chart,
@@ -303,7 +329,7 @@ func (s *Service) CreateSampleDevelopment(payload SampleDevelopmentPayload) (map
 	`
 	if _, err := tx.Exec(sampleQuery,
 		sampleID, devNo, devDate, payload.ClientID, payload.ClientName,
-		payload.ProductGenre, payload.TempProductName, payload.ImageURL, payload.ProductDescription,
+		payload.ProductGenre, payload.TempProductName, string(colorsBytes), payload.ImageURL, payload.ProductDescription,
 		payload.TempMeasurementChart, payload.DevComments, payload.MastersComments, payload.ReworkNotes,
 		payload.SampleImageURL, payload.Comments, status, nowMs, nowMs,
 	); err != nil {
@@ -344,72 +370,98 @@ func (s *Service) CreateSampleDevelopment(payload SampleDevelopmentPayload) (map
 	}
 
 	// 2. Fabrics
-	fabStmt, err := tx.Prepare("INSERT INTO sample_fabrics (id, development_id, fabric_name, lot_no, average, sequence) VALUES (?, ?, ?, ?, ?, ?)")
+	fabStmt, err := tx.Prepare("INSERT INTO sample_fabrics (id, development_id, fabric_name, lot_no, average, attrs_json, sequence) VALUES (?, ?, ?, ?, ?, ?, ?)")
 	if err != nil {
 		return nil, err
 	}
 	defer fabStmt.Close()
 	fabSeq := 0
 	for _, f := range payload.Fabrics {
-		if strings.TrimSpace(f.FabricName) == "" {
+		fabName := strings.TrimSpace(f.FabricName)
+		if fabName == "" && f.Attrs != nil {
+			if v, ok := f.Attrs["fabricType"].(string); ok {
+				fabName = strings.TrimSpace(v)
+			}
+		}
+		if fabName == "" && len(f.Attrs) == 0 {
 			continue
 		}
 		fid := "sfb_" + uuid.New().String()
-		if _, err := fabStmt.Exec(fid, sampleID, f.FabricName, f.LotNo, f.Average, fabSeq); err != nil {
+		if _, err := fabStmt.Exec(fid, sampleID, fabName, f.LotNo, f.Average, marshalAttrs(f.Attrs), fabSeq); err != nil {
 			return nil, fmt.Errorf("failed to insert sample fabric: %w", err)
 		}
 		fabSeq++
 	}
 
 	// 3. Trims
-	trimStmt, err := tx.Prepare("INSERT INTO sample_trims (id, development_id, trim_name, average, sequence) VALUES (?, ?, ?, ?, ?)")
+	trimStmt, err := tx.Prepare("INSERT INTO sample_trims (id, development_id, trim_name, average, attrs_json, sequence) VALUES (?, ?, ?, ?, ?, ?)")
 	if err != nil {
 		return nil, err
 	}
 	defer trimStmt.Close()
 	trimSeq := 0
 	for _, t := range payload.Trims {
-		if strings.TrimSpace(t.TrimName) == "" {
+		trimName := strings.TrimSpace(t.TrimName)
+		if trimName == "" && t.Attrs != nil {
+			if v, ok := t.Attrs["trimItem"].(string); ok && strings.TrimSpace(v) != "" {
+				trimName = strings.TrimSpace(v)
+			} else if v, ok := t.Attrs["trimType"].(string); ok {
+				trimName = strings.TrimSpace(v)
+			}
+		}
+		if trimName == "" && len(t.Attrs) == 0 {
 			continue
 		}
 		tid := "trm_" + uuid.New().String()
-		if _, err := trimStmt.Exec(tid, sampleID, t.TrimName, t.Average, trimSeq); err != nil {
+		if _, err := trimStmt.Exec(tid, sampleID, trimName, t.Average, marshalAttrs(t.Attrs), trimSeq); err != nil {
 			return nil, fmt.Errorf("failed to insert sample trim: %w", err)
 		}
 		trimSeq++
 	}
 
 	// 4. Zips
-	zipStmt, err := tx.Prepare("INSERT INTO sample_zips (id, development_id, zip_name, length_and_qty, sequence) VALUES (?, ?, ?, ?, ?)")
+	zipStmt, err := tx.Prepare("INSERT INTO sample_zips (id, development_id, zip_name, length_and_qty, attrs_json, sequence) VALUES (?, ?, ?, ?, ?, ?)")
 	if err != nil {
 		return nil, err
 	}
 	defer zipStmt.Close()
 	zipSeq := 0
 	for _, z := range payload.Zips {
-		if strings.TrimSpace(z.ZipName) == "" {
+		zipName := strings.TrimSpace(z.ZipName)
+		if zipName == "" && z.Attrs != nil {
+			if v, ok := z.Attrs["zipType"].(string); ok {
+				zipName = strings.TrimSpace(v)
+			}
+		}
+		if zipName == "" && len(z.Attrs) == 0 {
 			continue
 		}
 		zid := "szp_" + uuid.New().String()
-		if _, err := zipStmt.Exec(zid, sampleID, z.ZipName, z.LengthAndQty, zipSeq); err != nil {
+		if _, err := zipStmt.Exec(zid, sampleID, zipName, z.LengthAndQty, marshalAttrs(z.Attrs), zipSeq); err != nil {
 			return nil, fmt.Errorf("failed to insert sample zip: %w", err)
 		}
 		zipSeq++
 	}
 
 	// 5. Labels
-	lblStmt, err := tx.Prepare("INSERT INTO sample_labels (id, development_id, label_name, sequence) VALUES (?, ?, ?, ?)")
+	lblStmt, err := tx.Prepare("INSERT INTO sample_labels (id, development_id, label_name, attrs_json, sequence) VALUES (?, ?, ?, ?, ?)")
 	if err != nil {
 		return nil, err
 	}
 	defer lblStmt.Close()
 	lblSeq := 0
 	for _, l := range payload.Labels {
-		if strings.TrimSpace(l.LabelName) == "" {
+		lblName := strings.TrimSpace(l.LabelName)
+		if lblName == "" && l.Attrs != nil {
+			if v, ok := l.Attrs["labelGenre"].(string); ok {
+				lblName = strings.TrimSpace(v)
+			}
+		}
+		if lblName == "" && len(l.Attrs) == 0 {
 			continue
 		}
 		lid := "slb_" + uuid.New().String()
-		if _, err := lblStmt.Exec(lid, sampleID, l.LabelName, lblSeq); err != nil {
+		if _, err := lblStmt.Exec(lid, sampleID, lblName, marshalAttrs(l.Attrs), lblSeq); err != nil {
 			return nil, fmt.Errorf("failed to insert sample label: %w", err)
 		}
 		lblSeq++
@@ -478,10 +530,12 @@ func (s *Service) CreateSampleDevelopment(payload SampleDevelopmentPayload) (map
 // GetSampleDevelopment retrieves full sample master-detail tree
 func (s *Service) GetSampleDevelopment(idOrNo string) (*SampleDevelopmentDetail, error) {
 	var d SampleDevelopmentDetail
+	var colorsJSON string
 	query := `
 		SELECT
 			id, development_no, development_date, client_id, client_name,
 			coalesce(product_genre, ''), coalesce(temp_product_name, ''),
+			coalesce(colors_json, '[]'),
 			coalesce(image_url, ''), coalesce(product_description, ''),
 			coalesce(temp_measurement_chart, ''), coalesce(dev_comments, ''),
 			coalesce(masters_comments, ''), coalesce(rework_notes, ''),
@@ -492,12 +546,19 @@ func (s *Service) GetSampleDevelopment(idOrNo string) (*SampleDevelopmentDetail,
 	`
 	err := s.db.QueryRow(query, idOrNo, idOrNo).Scan(
 		&d.ID, &d.DevelopmentNo, &d.DevelopmentDate, &d.ClientID, &d.ClientName,
-		&d.ProductGenre, &d.TempProductName, &d.ImageURL, &d.ProductDescription,
+		&d.ProductGenre, &d.TempProductName, &colorsJSON, &d.ImageURL, &d.ProductDescription,
 		&d.TempMeasurementChart, &d.DevComments, &d.MastersComments, &d.ReworkNotes,
 		&d.SampleImageURL, &d.Comments, &d.Status, &d.CreatedAt, &d.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
+	}
+	d.Colors = make([]string, 0)
+	if colorsJSON != "" {
+		_ = json.Unmarshal([]byte(colorsJSON), &d.Colors)
+	}
+	if d.Colors == nil {
+		d.Colors = make([]string, 0)
 	}
 
 	// Child collections
@@ -514,48 +575,60 @@ func (s *Service) GetSampleDevelopment(idOrNo string) (*SampleDevelopmentDetail,
 	}
 
 	d.Fabrics = make([]SampleFabricItem, 0)
-	fbRows, err := s.db.Query("SELECT id, fabric_name, coalesce(lot_no, ''), average, sequence FROM sample_fabrics WHERE development_id = ? ORDER BY sequence", d.ID)
+	fbRows, err := s.db.Query("SELECT id, fabric_name, coalesce(lot_no, ''), average, coalesce(attrs_json, '{}'), sequence FROM sample_fabrics WHERE development_id = ? ORDER BY sequence", d.ID)
 	if err == nil {
 		defer fbRows.Close()
 		for fbRows.Next() {
 			var fb SampleFabricItem
-			if err := fbRows.Scan(&fb.ID, &fb.FabricName, &fb.LotNo, &fb.Average, &fb.Sequence); err == nil {
+			var attrsStr string
+			if err := fbRows.Scan(&fb.ID, &fb.FabricName, &fb.LotNo, &fb.Average, &attrsStr, &fb.Sequence); err == nil {
+				fb.Attrs = make(map[string]any)
+				_ = json.Unmarshal([]byte(attrsStr), &fb.Attrs)
 				d.Fabrics = append(d.Fabrics, fb)
 			}
 		}
 	}
 
 	d.Trims = make([]SampleTrimItem, 0)
-	trRows, err := s.db.Query("SELECT id, trim_name, average, sequence FROM sample_trims WHERE development_id = ? ORDER BY sequence", d.ID)
+	trRows, err := s.db.Query("SELECT id, trim_name, average, coalesce(attrs_json, '{}'), sequence FROM sample_trims WHERE development_id = ? ORDER BY sequence", d.ID)
 	if err == nil {
 		defer trRows.Close()
 		for trRows.Next() {
 			var tr SampleTrimItem
-			if err := trRows.Scan(&tr.ID, &tr.TrimName, &tr.Average, &tr.Sequence); err == nil {
+			var attrsStr string
+			if err := trRows.Scan(&tr.ID, &tr.TrimName, &tr.Average, &attrsStr, &tr.Sequence); err == nil {
+				tr.Attrs = make(map[string]any)
+				_ = json.Unmarshal([]byte(attrsStr), &tr.Attrs)
 				d.Trims = append(d.Trims, tr)
 			}
 		}
 	}
 
 	d.Zips = make([]SampleZipItem, 0)
-	zpRows, err := s.db.Query("SELECT id, zip_name, coalesce(length_and_qty, ''), sequence FROM sample_zips WHERE development_id = ? ORDER BY sequence", d.ID)
+	zpRows, err := s.db.Query("SELECT id, zip_name, coalesce(length_and_qty, ''), coalesce(attrs_json, '{}'), sequence FROM sample_zips WHERE development_id = ? ORDER BY sequence", d.ID)
 	if err == nil {
 		defer zpRows.Close()
 		for zpRows.Next() {
 			var zp SampleZipItem
-			if err := zpRows.Scan(&zp.ID, &zp.ZipName, &zp.LengthAndQty, &zp.Sequence); err == nil {
+			var attrsStr string
+			if err := zpRows.Scan(&zp.ID, &zp.ZipName, &zp.LengthAndQty, &attrsStr, &zp.Sequence); err == nil {
+				zp.Attrs = make(map[string]any)
+				_ = json.Unmarshal([]byte(attrsStr), &zp.Attrs)
 				d.Zips = append(d.Zips, zp)
 			}
 		}
 	}
 
 	d.Labels = make([]SampleLabelItem, 0)
-	lbRows, err := s.db.Query("SELECT id, label_name, sequence FROM sample_labels WHERE development_id = ? ORDER BY sequence", d.ID)
+	lbRows, err := s.db.Query("SELECT id, label_name, coalesce(attrs_json, '{}'), sequence FROM sample_labels WHERE development_id = ? ORDER BY sequence", d.ID)
 	if err == nil {
 		defer lbRows.Close()
 		for lbRows.Next() {
 			var lb SampleLabelItem
-			if err := lbRows.Scan(&lb.ID, &lb.LabelName, &lb.Sequence); err == nil {
+			var attrsStr string
+			if err := lbRows.Scan(&lb.ID, &lb.LabelName, &attrsStr, &lb.Sequence); err == nil {
+				lb.Attrs = make(map[string]any)
+				_ = json.Unmarshal([]byte(attrsStr), &lb.Attrs)
 				d.Labels = append(d.Labels, lb)
 			}
 		}
@@ -739,9 +812,9 @@ func (s *Service) CreateMasterProduct(payload CreateProductPayload) (map[string]
 	}
 	genderStmt, err := tx.Prepare(`
 		INSERT INTO master_product_genders (
-			id, product_id, gender, pharma_no, measurement_chart_url,
-			product_images_json, color_images_json, sequence
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+			id, product_id, gender, sizes_json, pharma_no, pharma_nos_json,
+			measurement_chart_url, product_images_json, color_images_json, sequence
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		return nil, err
@@ -753,9 +826,39 @@ func (s *Service) CreateMasterProduct(payload CreateProductPayload) (map[string]
 		if gid == "" {
 			gid = "mpg_" + uuid.New().String()[:8]
 		}
-		prodImgs, _ := json.Marshal(g.ProductImages)
-		colorImgs, _ := json.Marshal(g.ColorImages)
-		if _, err := genderStmt.Exec(gid, prodID, g.Gender, g.PharmaNo, g.MeasurementChartURL, string(prodImgs), string(colorImgs), i); err != nil {
+		prodImgs := g.ProductImages
+		if prodImgs == nil {
+			prodImgs = []string{}
+		}
+		colorImgs := g.ColorImages
+		if colorImgs == nil {
+			colorImgs = []map[string]any{}
+		}
+		sizes := g.Sizes
+		if sizes == nil {
+			sizes = []string{}
+		}
+		pharmaNos := make([]string, 0, len(g.PharmaNos))
+		for _, pn := range g.PharmaNos {
+			if clean := strings.TrimSpace(pn); clean != "" {
+				pharmaNos = append(pharmaNos, clean)
+			}
+		}
+		pharmaSingle := strings.TrimSpace(g.PharmaNo)
+		if len(pharmaNos) == 0 && pharmaSingle != "" {
+			pharmaNos = []string{pharmaSingle}
+		}
+		if pharmaSingle == "" && len(pharmaNos) > 0 {
+			pharmaSingle = pharmaNos[0]
+		}
+		sizesJSON, _ := json.Marshal(sizes)
+		pharmaNosJSON, _ := json.Marshal(pharmaNos)
+		prodImgsJSON, _ := json.Marshal(prodImgs)
+		colorImgsJSON, _ := json.Marshal(colorImgs)
+		if _, err := genderStmt.Exec(
+			gid, prodID, g.Gender, string(sizesJSON), pharmaSingle, string(pharmaNosJSON),
+			g.MeasurementChartURL, string(prodImgsJSON), string(colorImgsJSON), i,
+		); err != nil {
 			return nil, fmt.Errorf("failed to insert product gender: %w", err)
 		}
 	}
@@ -875,8 +978,9 @@ func (s *Service) GetMasterProduct(idOrName string) (*MasterProductDetail, error
 	// Genders
 	p.Genders = make([]ProductGenderItem, 0)
 	gRows, err := s.db.Query(`
-		SELECT id, gender, coalesce(pharma_no, ''), coalesce(measurement_chart_url, ''),
-		       coalesce(product_images_json, '[]'), coalesce(color_images_json, '[]'), sequence
+		SELECT id, gender, coalesce(sizes_json, '[]'), coalesce(pharma_no, ''), coalesce(pharma_nos_json, '[]'),
+		       coalesce(measurement_chart_url, ''), coalesce(product_images_json, '[]'),
+		       coalesce(color_images_json, '[]'), sequence
 		FROM master_product_genders
 		WHERE product_id = ?
 		ORDER BY sequence
@@ -885,10 +989,19 @@ func (s *Service) GetMasterProduct(idOrName string) (*MasterProductDetail, error
 		defer gRows.Close()
 		for gRows.Next() {
 			var g ProductGenderItem
-			var prodImgsJSON, colorImgsJSON string
-			if err := gRows.Scan(&g.ID, &g.Gender, &g.PharmaNo, &g.MeasurementChartURL, &prodImgsJSON, &colorImgsJSON, &g.Sequence); err == nil {
+			var sizesJSON, pharmaNosJSON, prodImgsJSON, colorImgsJSON string
+			if err := gRows.Scan(&g.ID, &g.Gender, &sizesJSON, &g.PharmaNo, &pharmaNosJSON, &g.MeasurementChartURL, &prodImgsJSON, &colorImgsJSON, &g.Sequence); err == nil {
+				g.Sizes = make([]string, 0)
+				g.PharmaNos = make([]string, 0)
+				g.ProductImages = make([]string, 0)
+				g.ColorImages = make([]map[string]any, 0)
+				_ = json.Unmarshal([]byte(sizesJSON), &g.Sizes)
+				_ = json.Unmarshal([]byte(pharmaNosJSON), &g.PharmaNos)
 				_ = json.Unmarshal([]byte(prodImgsJSON), &g.ProductImages)
 				_ = json.Unmarshal([]byte(colorImgsJSON), &g.ColorImages)
+				if len(g.PharmaNos) == 0 && strings.TrimSpace(g.PharmaNo) != "" {
+					g.PharmaNos = []string{strings.TrimSpace(g.PharmaNo)}
+				}
 				p.Genders = append(p.Genders, g)
 			}
 		}

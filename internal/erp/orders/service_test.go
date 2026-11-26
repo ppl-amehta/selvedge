@@ -25,6 +25,15 @@ func setupTestDB(t *testing.T) (*db.DB, *orders.Service, *graph.Store) {
 		"../../../migrations/001_initial_graph.sql",
 		"../../../migrations/002_seed_masters.sql",
 		"../../../migrations/003_multi_product_orders.sql",
+		"../../../migrations/004_three_stage_inward_pipeline.sql",
+		"../../../migrations/005_order_prep_and_planning.sql",
+		"../../../migrations/006_floor_cutting_station.sql",
+		"../../../migrations/007_invoices_and_multi_fabric_lots.sql",
+		"../../../migrations/008_consolidate_master_dropdowns.sql",
+		"../../../migrations/009_clean_foundational_excel_truth.sql",
+		"../../../migrations/010_sample_development_and_product_creation.sql",
+		"../../../migrations/011_enrich_gender_sizes_and_dropdown_relationships.sql",
+		"../../../migrations/013_enrich_attributes_and_schema.sql",
 	}
 
 	for _, mFile := range migrationFiles {
@@ -361,4 +370,50 @@ func TestSuggestNextOrderNo_FormatMMYY0000(t *testing.T) {
 		t.Fatalf("Expected second order number to end in 0002, got %q", no2)
 	}
 	t.Logf("✓ Verified auto-increment second format: %s", no2)
+}
+
+func TestOrderFabricCompositionAndBrandLabelGenre(t *testing.T) {
+	database, svc, _ := setupTestDB(t)
+	defer database.Close()
+	defer os.Remove("/tmp/test_selvedge_orders.db")
+
+	resOrder, err := svc.CreateOrder(orders.CreateOrderPayload{
+		ClientName: "Test Client Ltd",
+		Items: []orders.OrderItemPayload{
+			{
+				Category:          "Apparel",
+				SubCategory:       "Polo",
+				ProductName:       "Classic Pique Polo",
+				ColorName:         "White",
+				FabricName:        "Venus",
+				FabricComposition: "95%Poly 5%SP",
+				BrandLabel:        "ETTU",
+				BrandLabelGenre:   "DTF",
+				BrandLabelDesc:    "ETTU +Size Navy/aqua",
+				AdditionalLabels: []orders.LabelDetailPayload{
+					{LabelType: "washcare Label", Description: "made in india white/black", Genre: "Printed"},
+				},
+				UnitPrice: 499,
+				TotalQty:  10,
+				Matrix:    map[string]any{"Men": map[string]any{"M": 10}},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateOrder with fabricComposition/brandLabelGenre failed: %v", err)
+	}
+	fetched, err := svc.GetOrder(resOrder["productionOrderNo"].(string))
+	if err != nil {
+		t.Fatalf("GetOrder failed: %v", err)
+	}
+	fetchedItems := fetched["items"].([]map[string]any)
+	if fetchedItems[0]["fabricComposition"] != "95%Poly 5%SP" {
+		t.Errorf("expected fabricComposition 95%%Poly 5%%SP, got %v", fetchedItems[0]["fabricComposition"])
+	}
+	if fetchedItems[0]["brandLabelGenre"] != "DTF" {
+		t.Errorf("expected brandLabelGenre DTF, got %v", fetchedItems[0]["brandLabelGenre"])
+	}
+	if fetchedItems[0]["brandings"] == nil || fetchedItems[0]["personalizations"] == nil {
+		t.Errorf("expected non-nil brandings & personalizations slices for safe CopySpecsModal cloning")
+	}
 }

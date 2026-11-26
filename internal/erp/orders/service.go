@@ -90,28 +90,30 @@ type LabelDetailPayload struct {
 }
 
 type OrderItemPayload struct {
-	ID               string                   `json:"id"`
-	ItemSequence     int                      `json:"itemSequence"`
-	Category         string                   `json:"category"`
-	SubCategory      string                   `json:"subCategory"`
-	ProductName      string                   `json:"productName"`
-	ColorName        string                   `json:"colorName"`
-	FabricName       string                   `json:"fabricName"`
-	Size             string                   `json:"size,omitempty"`
-	UnitPrice        float64                  `json:"unitPrice"`
-	TotalQty         int                      `json:"totalQty"`
-	ClientEtd        string                   `json:"clientEtd"`
-	ClientRemarks    string                   `json:"clientRemarks"`
-	ProductImageUrl  string                   `json:"productImageUrl"`
-	MainLabel        string                   `json:"mainLabel"`
-	OtherLabel       string                   `json:"otherLabel"`
-	BrandLabel       string                   `json:"brandLabel,omitempty"`
-	BrandLabelDesc   string                   `json:"brandLabelDesc,omitempty"`
-	AdditionalLabels []LabelDetailPayload     `json:"additionalLabels,omitempty"`
-	CustPackaging    string                   `json:"custPackaging"`
-	Matrix           any                      `json:"matrix"`
-	Brandings        []BrandingPayload        `json:"brandings"`
-	Personalizations []PersonalizationPayload `json:"personalizations"`
+	ID                string                   `json:"id"`
+	ItemSequence      int                      `json:"itemSequence"`
+	Category          string                   `json:"category"`
+	SubCategory       string                   `json:"subCategory"`
+	ProductName       string                   `json:"productName"`
+	ColorName         string                   `json:"colorName"`
+	FabricName        string                   `json:"fabricName"`
+	FabricComposition string                   `json:"fabricComposition,omitempty"`
+	Size              string                   `json:"size,omitempty"`
+	UnitPrice         float64                  `json:"unitPrice"`
+	TotalQty          int                      `json:"totalQty"`
+	ClientEtd         string                   `json:"clientEtd"`
+	ClientRemarks     string                   `json:"clientRemarks"`
+	ProductImageUrl   string                   `json:"productImageUrl"`
+	MainLabel         string                   `json:"mainLabel"`
+	OtherLabel        string                   `json:"otherLabel"`
+	BrandLabel        string                   `json:"brandLabel,omitempty"`
+	BrandLabelGenre   string                   `json:"brandLabelGenre,omitempty"`
+	BrandLabelDesc    string                   `json:"brandLabelDesc,omitempty"`
+	AdditionalLabels  []LabelDetailPayload     `json:"additionalLabels,omitempty"`
+	CustPackaging     string                   `json:"custPackaging"`
+	Matrix            any                      `json:"matrix"`
+	Brandings         []BrandingPayload        `json:"brandings"`
+	Personalizations  []PersonalizationPayload `json:"personalizations"`
 }
 
 type BrandingPayload struct {
@@ -572,17 +574,33 @@ func (s *Service) CreateOrder(p CreateOrderPayload) (map[string]any, error) {
 			return nil, fmt.Errorf("failed to marshal item #%d matrix: %w", idx+1, err)
 		}
 
+		brandLabel := strings.TrimSpace(item.BrandLabel)
+		if brandLabel == "" {
+			brandLabel = item.MainLabel
+		}
+		mainLabel := strings.TrimSpace(item.MainLabel)
+		if mainLabel == "" {
+			mainLabel = brandLabel
+		}
+		addLabels := item.AdditionalLabels
+		if addLabels == nil {
+			addLabels = []LabelDetailPayload{}
+		}
+		addLabelsJSON, _ := json.Marshal(addLabels)
+
 		itemQuery := `
 			INSERT INTO order_items (
 				id, order_id, item_sequence, category, sub_category, product_name,
-				color_name, fabric_name, unit_price, total_qty, client_etd, client_remarks,
-				product_image_url, main_label, other_label, cust_packaging, matrix_json, created_at
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+				color_name, fabric_name, fabric_composition, unit_price, total_qty, client_etd, client_remarks,
+				product_image_url, main_label, other_label, brand_label, brand_label_genre, brand_label_desc,
+				additional_labels_json, cust_packaging, matrix_json, created_at
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		`
 		_, err = tx.Exec(itemQuery,
 			itemID, orderID, idx+1, item.Category, item.SubCategory, item.ProductName,
-			item.ColorName, item.FabricName, item.UnitPrice, item.TotalQty, item.ClientEtd, item.ClientRemarks,
-			item.ProductImageUrl, item.MainLabel, item.OtherLabel, item.CustPackaging, string(itemMatrixJSON), nowMs,
+			item.ColorName, item.FabricName, item.FabricComposition, item.UnitPrice, item.TotalQty, item.ClientEtd, item.ClientRemarks,
+			item.ProductImageUrl, mainLabel, item.OtherLabel, brandLabel, item.BrandLabelGenre, item.BrandLabelDesc,
+			string(addLabelsJSON), item.CustPackaging, string(itemMatrixJSON), nowMs,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to insert order item #%d: %w", idx+1, err)
@@ -831,24 +849,28 @@ func (s *Service) GetOrder(orderNo string) (map[string]any, error) {
 	// 1. Fetch Line Items from order_items
 	itemRows, err := s.db.Query(`
 		SELECT id, item_sequence, category, sub_category, product_name, color_name,
-		       fabric_name, unit_price, total_qty, client_etd, client_remarks,
-		       product_image_url, main_label, other_label, cust_packaging, matrix_json
+		       fabric_name, COALESCE(fabric_composition, ''), unit_price, total_qty, client_etd, client_remarks,
+		       product_image_url, main_label, other_label,
+		       COALESCE(brand_label, ''), COALESCE(brand_label_genre, ''), COALESCE(brand_label_desc, ''),
+		       COALESCE(additional_labels_json, '[]'),
+		       cust_packaging, matrix_json
 		FROM order_items WHERE order_id = ? ORDER BY item_sequence ASC
 	`, o.ID)
 
-	var items []map[string]any
+	items := make([]map[string]any, 0)
 	if err == nil {
 		defer itemRows.Close()
 		for itemRows.Next() {
 			var itID, itCat, itSub, itProd, itColor string
 			var itSeq, itQty int
 			var itPrice float64
-			var itFab, itEtd, itRem, itImg, itMain, itOther, itPkg, itMatrix sql.NullString
+			var itFab, itFabComp, itEtd, itRem, itImg, itMain, itOther, itBrandLbl, itBrandGenre, itBrandDesc, itAddLabels, itPkg, itMatrix sql.NullString
 
 			_ = itemRows.Scan(
 				&itID, &itSeq, &itCat, &itSub, &itProd, &itColor,
-				&itFab, &itPrice, &itQty, &itEtd, &itRem,
-				&itImg, &itMain, &itOther, &itPkg, &itMatrix,
+				&itFab, &itFabComp, &itPrice, &itQty, &itEtd, &itRem,
+				&itImg, &itMain, &itOther, &itBrandLbl, &itBrandGenre, &itBrandDesc,
+				&itAddLabels, &itPkg, &itMatrix,
 			)
 
 			var matrixObj any
@@ -856,8 +878,17 @@ func (s *Service) GetOrder(orderNo string) (map[string]any, error) {
 				_ = json.Unmarshal([]byte(itMatrix.String), &matrixObj)
 			}
 
-			// Fetch Brandings for this item
-			var brandings []map[string]any
+			addLabels := make([]LabelDetailPayload, 0)
+			if itAddLabels.Valid && itAddLabels.String != "" {
+				_ = json.Unmarshal([]byte(itAddLabels.String), &addLabels)
+			}
+			brandLbl := itBrandLbl.String
+			if brandLbl == "" {
+				brandLbl = itMain.String
+			}
+
+			// Fetch Brandings for this item (non-nil slice so JSON never returns null)
+			brandings := make([]map[string]any, 0)
 			bRows, bErr := s.db.Query(`
 				SELECT id, branding_type, position, size, placement, color, comment, branding_file_url
 				FROM order_item_brandings WHERE order_item_id = ?
@@ -881,8 +912,8 @@ func (s *Service) GetOrder(orderNo string) (map[string]any, error) {
 				bRows.Close()
 			}
 
-			// Fetch Personalizations for this item
-			var personalizations []map[string]any
+			// Fetch Personalizations for this item (non-nil slice)
+			personalizations := make([]map[string]any, 0)
 			pRows, pErr := s.db.Query(`
 				SELECT id, gender, size, name, number, remarks
 				FROM order_personalizations WHERE order_item_id = ?
@@ -905,30 +936,35 @@ func (s *Service) GetOrder(orderNo string) (map[string]any, error) {
 			}
 
 			items = append(items, map[string]any{
-				"id":               itID,
-				"itemSequence":     itSeq,
-				"category":         itCat,
-				"subCategory":      itSub,
-				"productName":      itProd,
-				"colorName":        itColor,
-				"fabricName":       itFab.String,
-				"unitPrice":        itPrice,
-				"totalQty":         itQty,
-				"clientEtd":        itEtd.String,
-				"clientRemarks":    itRem.String,
-				"productImageUrl":  itImg.String,
-				"mainLabel":        itMain.String,
-				"otherLabel":       itOther.String,
-				"custPackaging":    itPkg.String,
-				"matrix":           matrixObj,
-				"brandings":        brandings,
-				"personalizations": personalizations,
+				"id":                itID,
+				"itemSequence":      itSeq,
+				"category":          itCat,
+				"subCategory":       itSub,
+				"productName":       itProd,
+				"colorName":         itColor,
+				"fabricName":        itFab.String,
+				"fabricComposition": itFabComp.String,
+				"unitPrice":         itPrice,
+				"totalQty":          itQty,
+				"clientEtd":         itEtd.String,
+				"clientRemarks":     itRem.String,
+				"productImageUrl":   itImg.String,
+				"mainLabel":         itMain.String,
+				"otherLabel":        itOther.String,
+				"brandLabel":        brandLbl,
+				"brandLabelGenre":   itBrandGenre.String,
+				"brandLabelDesc":    itBrandDesc.String,
+				"additionalLabels":  addLabels,
+				"custPackaging":     itPkg.String,
+				"matrix":            matrixObj,
+				"brandings":         brandings,
+				"personalizations":  personalizations,
 			})
 		}
 	}
 
 	// 2. Fetch Shipping Destinations
-	var shippingDests []map[string]any
+	shippingDests := make([]map[string]any, 0)
 	sRows, err := s.db.Query(`
 		SELECT id, order_item_id, destination_address, quantity, freight_mode, carrier, docket_no, target_etd
 		FROM order_shipping_destinations WHERE order_id = ?
@@ -962,20 +998,27 @@ func (s *Service) GetOrder(orderNo string) (map[string]any, error) {
 			_ = json.Unmarshal([]byte(o.SizeBreakdownStr.String), &sizeBreakdown)
 		}
 		items = append(items, map[string]any{
-			"id":              fmt.Sprintf("item_%s_1", o.OrderNo),
-			"itemSequence":    1,
-			"category":        o.Category,
-			"subCategory":     o.SubCategory,
-			"productName":     o.ProductName,
-			"colorName":       o.ColorName,
-			"fabricName":      o.FabricName.String,
-			"unitPrice":       o.UnitPrice,
-			"totalQty":        o.TotalQty,
-			"matrix":          sizeBreakdown,
-			"mainLabel":       o.MainLabel.String,
-			"otherLabel":      o.OtherLabel.String,
-			"custPackaging":   o.CustPackaging.String,
-			"productImageUrl": o.BrandingFileUrl.String,
+			"id":                fmt.Sprintf("item_%s_1", o.OrderNo),
+			"itemSequence":      1,
+			"category":          o.Category,
+			"subCategory":       o.SubCategory,
+			"productName":       o.ProductName,
+			"colorName":         o.ColorName,
+			"fabricName":        o.FabricName.String,
+			"fabricComposition": "",
+			"unitPrice":         o.UnitPrice,
+			"totalQty":          o.TotalQty,
+			"matrix":            sizeBreakdown,
+			"mainLabel":         o.MainLabel.String,
+			"otherLabel":        o.OtherLabel.String,
+			"brandLabel":        o.MainLabel.String,
+			"brandLabelGenre":   "",
+			"brandLabelDesc":    "",
+			"additionalLabels":  make([]LabelDetailPayload, 0),
+			"custPackaging":     o.CustPackaging.String,
+			"productImageUrl":   o.BrandingFileUrl.String,
+			"brandings":         make([]map[string]any, 0),
+			"personalizations":  make([]map[string]any, 0),
 		})
 	}
 

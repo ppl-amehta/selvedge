@@ -63,6 +63,7 @@ type InwardInvoice struct {
 	InvoiceNo     string   `json:"invoiceNo"`
 	VendorName    string   `json:"vendorName"`
 	InvoiceDate   string   `json:"invoiceDate"`
+	InwardType    string   `json:"inwardType"`
 	InvoiceQty    float64  `json:"invoiceQty"`
 	InvoiceAmount float64  `json:"invoiceAmount"`
 	UOM           string   `json:"uom"`
@@ -74,15 +75,17 @@ type InwardInvoice struct {
 }
 
 type GateBundleStub struct {
-	Sequence int     `json:"sequence"`
-	SizeSpec string  `json:"sizeSpec,omitempty"`
-	Rate     float64 `json:"rate,omitempty"`
+	Sequence    int            `json:"sequence"`
+	InvoicedQty float64        `json:"invoicedQty,omitempty"`
+	SizeSpec    string         `json:"sizeSpec,omitempty"`
+	Rate        float64        `json:"rate,omitempty"`
+	Attrs       map[string]any `json:"attrs,omitempty"`
 }
 
 type GateInwardPayload struct {
 	ParentCode     string              `json:"parentCode"`
 	InwardDate     string              `json:"inwardDate"`
-	InwardType     string              `json:"inwardType"` // Fabric, Zips, Packaging, Trims, Finished Goods, Labels
+	InwardType     string              `json:"inwardType"` // Fabric, Zips, packaging, Trims, Label, Apparel, etc.
 	VendorName     string              `json:"vendorName"`
 	InvoiceNo      string              `json:"invoiceNo"`
 	InvoiceQty     float64             `json:"invoiceQty"`
@@ -95,18 +98,20 @@ type GateInwardPayload struct {
 	NoOfBundles    int                 `json:"noOfBundles"`
 	Comment        string              `json:"comment"`
 	Attrs          map[string]any      `json:"attrs"`   // Conditional specs
-	Bundles        []GateBundleStub    `json:"bundles"` // Optional bundle-level size & rate
+	Bundles        []GateBundleStub    `json:"bundles"` // Optional bundle-level size, qty & rate
 	FabricProducts []FabricProductItem `json:"fabricProducts,omitempty"` // Multiple fabric products per lot
 	QRCopies       int                 `json:"qrCopies,omitempty"`       // Default 3
 }
 
 type BundleStubInfo struct {
-	BundleCode string  `json:"bundleCode"`
-	Sequence   int     `json:"sequence"`
-	Total      int     `json:"total"`
-	SizeSpec   string  `json:"sizeSpec,omitempty"`
-	Rate       float64 `json:"rate,omitempty"`
-	Status     string  `json:"status"`
+	BundleCode  string         `json:"bundleCode"`
+	Sequence    int            `json:"sequence"`
+	Total       int            `json:"total"`
+	InvoicedQty float64        `json:"invoicedQty"`
+	SizeSpec    string         `json:"sizeSpec,omitempty"`
+	Rate        float64        `json:"rate,omitempty"`
+	Attrs       map[string]any `json:"attrs,omitempty"`
+	Status      string         `json:"status"`
 }
 
 type GateInwardResult struct {
@@ -117,15 +122,17 @@ type GateInwardResult struct {
 }
 
 type FloorCountBundle struct {
-	BundleCode  string  `json:"bundleCode"`
-	Sequence    int     `json:"sequence"`
-	CountedQty  float64 `json:"countedQty"`
-	LocationBin string  `json:"locationBin"`
-	MeasuredGsm float64 `json:"measuredGsm,omitempty"`
-	MeasuredDia float64 `json:"measuredDia,omitempty"`
-	SizeSpec    string  `json:"sizeSpec,omitempty"`
-	Rate        float64 `json:"rate,omitempty"`
-	Comment     string  `json:"comment,omitempty"`
+	BundleCode  string         `json:"bundleCode"`
+	Sequence    int            `json:"sequence"`
+	InvoicedQty float64        `json:"invoicedQty,omitempty"`
+	CountedQty  float64        `json:"countedQty"`
+	LocationBin string         `json:"locationBin"`
+	MeasuredGsm float64        `json:"measuredGsm,omitempty"`
+	MeasuredDia float64        `json:"measuredDia,omitempty"`
+	SizeSpec    string         `json:"sizeSpec,omitempty"`
+	Rate        float64        `json:"rate,omitempty"`
+	Comment     string         `json:"comment,omitempty"`
+	Attrs       map[string]any `json:"attrs,omitempty"`
 }
 
 type FloorCountPayload struct {
@@ -211,28 +218,30 @@ type LotSummary struct {
 }
 
 type BundleDetail struct {
-	ID             string  `json:"id"`
-	BundleCode     string  `json:"bundleCode"`
-	ParentCode     string  `json:"parentCode"`
-	BundleSequence int     `json:"bundleSequence"`
-	TotalBundles   int     `json:"totalBundles"`
-	ItemType       string  `json:"itemType"`
-	ItemName       string  `json:"itemName"`
-	ColorName      string  `json:"colorName"`
-	InwardQty      float64 `json:"inwardQty"`
-	MeasuredGsm    float64 `json:"measuredGsm"`
-	MeasuredDia    float64 `json:"measuredDia"`
-	SizeSpec       string  `json:"sizeSpec"`
-	Rate           float64 `json:"rate"`
-	LocationBin    string  `json:"locationBin"`
-	QcStatus       string  `json:"qcStatus"`
-	QcRemarks      string  `json:"qcRemarks"`
-	QcImageUrl     string  `json:"qcImageUrl"`
-	QcAudioUrl     string  `json:"qcAudioUrl"`
-	QcTranscript   string  `json:"qcTranscript"`
-	QcInspectedAt  int64   `json:"qcInspectedAt"`
-	BundleComment  string  `json:"bundleComment"`
-	QRPayload      string  `json:"qrPayload"`
+	ID             string         `json:"id"`
+	BundleCode     string         `json:"bundleCode"`
+	ParentCode     string         `json:"parentCode"`
+	BundleSequence int            `json:"bundleSequence"`
+	TotalBundles   int            `json:"totalBundles"`
+	ItemType       string         `json:"itemType"`
+	ItemName       string         `json:"itemName"`
+	ColorName      string         `json:"colorName"`
+	InvoicedQty    float64        `json:"invoicedQty"`
+	InwardQty      float64        `json:"inwardQty"`
+	MeasuredGsm    float64        `json:"measuredGsm"`
+	MeasuredDia    float64        `json:"measuredDia"`
+	SizeSpec       string         `json:"sizeSpec"`
+	Rate           float64        `json:"rate"`
+	Attrs          map[string]any `json:"attrs,omitempty"`
+	LocationBin    string         `json:"locationBin"`
+	QcStatus       string         `json:"qcStatus"`
+	QcRemarks      string         `json:"qcRemarks"`
+	QcImageUrl     string         `json:"qcImageUrl"`
+	QcAudioUrl     string         `json:"qcAudioUrl"`
+	QcTranscript   string         `json:"qcTranscript"`
+	QcInspectedAt  int64          `json:"qcInspectedAt"`
+	BundleComment  string         `json:"bundleComment"`
+	QRPayload      string         `json:"qrPayload"`
 }
 
 type LotDetail struct {
@@ -334,6 +343,16 @@ func (s *Service) GateInward(p GateInwardPayload) (GateInwardResult, error) {
 		parentCode, err = s.SuggestNextParentCode()
 		if err != nil {
 			return GateInwardResult{}, fmt.Errorf("failed to generate parent code: %w", err)
+		}
+	}
+
+	if p.InvoiceQty <= 0 && len(p.Bundles) > 0 {
+		var bSum float64
+		for _, b := range p.Bundles {
+			bSum += b.InvoicedQty
+		}
+		if bSum > 0 {
+			p.InvoiceQty = math.Round(bSum*1000) / 1000
 		}
 	}
 
@@ -491,17 +510,27 @@ func (s *Service) GateInward(p GateInwardPayload) (GateInwardResult, error) {
 		}
 	}
 
-	// 1b. Resolve or Auto-Register Top-Level Inward Invoice
-	var invoiceID string
-	err = tx.QueryRow("SELECT id FROM inward_invoices WHERE vendor_name = ? AND invoice_no = ?", vendorName, invoiceNo).Scan(&invoiceID)
+	// 1b. Resolve or Auto-Register Top-Level Inward Invoice (Enforce ONLY ONE Inward Type per Invoice)
+	var invoiceID, existingInvType string
+	err = tx.QueryRow("SELECT id, COALESCE(inward_type, '') FROM inward_invoices WHERE vendor_name = ? AND invoice_no = ?", vendorName, invoiceNo).Scan(&invoiceID, &existingInvType)
 	if err == sql.ErrNoRows {
 		invoiceID = fmt.Sprintf("inv_%s", randomSuffix())
 		_, err = tx.Exec(`
-			INSERT INTO inward_invoices (id, invoice_no, vendor_name, invoice_date, invoice_qty, invoice_amount, uom, currency, remarks, created_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, 'INR', ?, ?)
-		`, invoiceID, invoiceNo, vendorName, inwardDate, p.InvoiceQty, p.InvoiceAmount, uom, p.Comment, now)
+			INSERT INTO inward_invoices (id, invoice_no, vendor_name, invoice_date, inward_type, invoice_qty, invoice_amount, uom, currency, remarks, created_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'INR', ?, ?)
+		`, invoiceID, invoiceNo, vendorName, inwardDate, inwardType, p.InvoiceQty, p.InvoiceAmount, uom, p.Comment, now)
 		if err != nil {
 			return GateInwardResult{}, fmt.Errorf("failed to register inward invoice: %w", err)
+		}
+	} else if err != nil {
+		return GateInwardResult{}, fmt.Errorf("failed to check existing inward invoice: %w", err)
+	} else {
+		cleanExistingType := strings.TrimSpace(existingInvType)
+		if cleanExistingType != "" && !strings.EqualFold(cleanExistingType, inwardType) {
+			return GateInwardResult{}, fmt.Errorf("invoice %s is already assigned to Inward Type '%s'; only one inward type per invoice is allowed", invoiceNo, cleanExistingType)
+		}
+		if cleanExistingType == "" {
+			_, _ = tx.Exec("UPDATE inward_invoices SET inward_type = ? WHERE id = ?", inwardType, invoiceID)
 		}
 	}
 
@@ -596,8 +625,21 @@ func (s *Service) GateInward(p GateInwardPayload) (GateInwardResult, error) {
 	// 5. Generate Bundle Stubs (ParentCode-1/N .. N/N) with Pending status
 	var createdStubs []BundleStubInfo
 	bundleIndex := 0
+	isFabric := strings.EqualFold(inwardType, "Fabric")
+	defaultBundleInvoiced := math.Round((p.InvoiceQty/float64(numBundles))*1000) / 1000
 
-	if inwardType == "Fabric" && len(fabricProducts) > 0 {
+	marshalBundleAttrs := func(m map[string]any) string {
+		if len(m) == 0 {
+			return "{}"
+		}
+		b, err := json.Marshal(m)
+		if err != nil {
+			return "{}"
+		}
+		return string(b)
+	}
+
+	if isFabric && len(fabricProducts) > 0 {
 		for _, fp := range fabricProducts {
 			rolls := fp.RollCount
 			if rolls <= 0 {
@@ -633,12 +675,28 @@ func (s *Service) GateInward(p GateInwardPayload) (GateInwardResult, error) {
 					sizeSpec += fmt.Sprintf(" (Dia: %s)", fp.Dia)
 				}
 				rate := prodRate
+				invoicedQty := defaultBundleInvoiced
+				var bAttrs map[string]any
 				if stub, ok := stubSpecs[bundleIndex]; ok {
 					if stub.SizeSpec != "" {
 						sizeSpec = stub.SizeSpec
 					}
 					if stub.Rate > 0 {
 						rate = stub.Rate
+					}
+					if stub.InvoicedQty > 0 {
+						invoicedQty = stub.InvoicedQty
+					}
+					if len(stub.Attrs) > 0 {
+						bAttrs = stub.Attrs
+					}
+				} else if bundleIndex <= len(p.Bundles) {
+					st := p.Bundles[bundleIndex-1]
+					if st.InvoicedQty > 0 {
+						invoicedQty = st.InvoicedQty
+					}
+					if len(st.Attrs) > 0 {
+						bAttrs = st.Attrs
 					}
 				}
 
@@ -648,6 +706,7 @@ func (s *Service) GateInward(p GateInwardPayload) (GateInwardResult, error) {
 					"item":        prodItemName,
 					"color":       prodColor,
 					"sizeSpec":    sizeSpec,
+					"invoicedQty": invoicedQty,
 					"location":    "A/R01/S01",
 					"qcStatus":    "Pending",
 					"generatedAt": time.Now().Format(time.RFC3339),
@@ -656,13 +715,13 @@ func (s *Service) GateInward(p GateInwardPayload) (GateInwardResult, error) {
 				_, err = tx.Exec(`
 					INSERT INTO bundles (
 						id, bundle_code, parent_lot_id, parent_code, bundle_sequence, total_bundles,
-						item_type, item_name, color_name, inward_weight_qty, measured_gsm,
+						item_type, item_name, color_name, invoiced_qty, inward_weight_qty, measured_gsm,
 						location_bin, qc_status, qc_remarks, qr_payload, available_qty,
-						size_spec, rate, created_at
-					) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0.0, ?, 'A/R01/S01', 'Pending', '', ?, 0.0, ?, ?, ?)
+						size_spec, rate, attrs_json, created_at
+					) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0.0, ?, 'A/R01/S01', 'Pending', '', ?, 0.0, ?, ?, ?, ?)
 				`, bundleID, bundleCode, parentLotID, parentCode, bundleIndex, numBundles,
-					inwardType, prodItemName, prodColor, prodGsm,
-					string(qrPayloadJSON), sizeSpec, rate, now,
+					inwardType, prodItemName, prodColor, invoicedQty, prodGsm,
+					string(qrPayloadJSON), sizeSpec, rate, marshalBundleAttrs(bAttrs), now,
 				)
 				if err != nil {
 					return GateInwardResult{}, fmt.Errorf("failed to insert fabric bundle stub %s: %w", bundleCode, err)
@@ -670,11 +729,12 @@ func (s *Service) GateInward(p GateInwardPayload) (GateInwardResult, error) {
 
 				// Graph Node: BUNDLE
 				bundleProps := map[string]any{
-					"bundle_code": bundleCode,
-					"sequence":    bundleIndex,
-					"total":       numBundles,
-					"qc_status":   "Pending",
-					"item_name":   prodItemName,
+					"bundle_code":  bundleCode,
+					"sequence":     bundleIndex,
+					"total":        numBundles,
+					"qc_status":    "Pending",
+					"item_name":    prodItemName,
+					"invoiced_qty": invoicedQty,
 				}
 				if _, err := s.graph.InsertNode(tx, graph.TypeBundle, bundleProps, bundleID); err != nil {
 					return GateInwardResult{}, fmt.Errorf("failed to insert bundle graph node: %w", err)
@@ -685,12 +745,14 @@ func (s *Service) GateInward(p GateInwardPayload) (GateInwardResult, error) {
 				}
 
 				createdStubs = append(createdStubs, BundleStubInfo{
-					BundleCode: bundleCode,
-					Sequence:   bundleIndex,
-					Total:      numBundles,
-					SizeSpec:   sizeSpec,
-					Rate:       rate,
-					Status:     "Pending",
+					BundleCode:  bundleCode,
+					Sequence:    bundleIndex,
+					Total:       numBundles,
+					InvoicedQty: invoicedQty,
+					SizeSpec:    sizeSpec,
+					Rate:        rate,
+					Attrs:       bAttrs,
+					Status:      "Pending",
 				})
 			}
 		}
@@ -701,6 +763,8 @@ func (s *Service) GateInward(p GateInwardPayload) (GateInwardResult, error) {
 
 			sizeSpec := ""
 			rate := unitRate
+			invoicedQty := defaultBundleInvoiced
+			var bAttrs map[string]any
 			if stub, ok := stubSpecs[i]; ok {
 				if stub.SizeSpec != "" {
 					sizeSpec = stub.SizeSpec
@@ -708,13 +772,31 @@ func (s *Service) GateInward(p GateInwardPayload) (GateInwardResult, error) {
 				if stub.Rate > 0 {
 					rate = stub.Rate
 				}
+				if stub.InvoicedQty > 0 {
+					invoicedQty = stub.InvoicedQty
+				}
+				if len(stub.Attrs) > 0 {
+					bAttrs = stub.Attrs
+				}
 			} else if i <= len(p.Bundles) {
-				if p.Bundles[i-1].SizeSpec != "" {
-					sizeSpec = p.Bundles[i-1].SizeSpec
+				st := p.Bundles[i-1]
+				if st.SizeSpec != "" {
+					sizeSpec = st.SizeSpec
 				}
-				if p.Bundles[i-1].Rate > 0 {
-					rate = p.Bundles[i-1].Rate
+				if st.Rate > 0 {
+					rate = st.Rate
 				}
+				if st.InvoicedQty > 0 {
+					invoicedQty = st.InvoicedQty
+				}
+				if len(st.Attrs) > 0 {
+					bAttrs = st.Attrs
+				}
+			}
+
+			initGsm := 0.0
+			if isFabric {
+				initGsm = invoiceGsm
 			}
 
 			qrPayloadJSON, _ := json.Marshal(map[string]any{
@@ -723,6 +805,7 @@ func (s *Service) GateInward(p GateInwardPayload) (GateInwardResult, error) {
 				"item":        itemName,
 				"color":       colorName,
 				"sizeSpec":    sizeSpec,
+				"invoicedQty": invoicedQty,
 				"location":    "A/R01/S01",
 				"qcStatus":    "Pending",
 				"generatedAt": time.Now().Format(time.RFC3339),
@@ -731,13 +814,13 @@ func (s *Service) GateInward(p GateInwardPayload) (GateInwardResult, error) {
 			_, err = tx.Exec(`
 				INSERT INTO bundles (
 					id, bundle_code, parent_lot_id, parent_code, bundle_sequence, total_bundles,
-					item_type, item_name, color_name, inward_weight_qty, measured_gsm,
+					item_type, item_name, color_name, invoiced_qty, inward_weight_qty, measured_gsm,
 					location_bin, qc_status, qc_remarks, qr_payload, available_qty,
-					size_spec, rate, created_at
-				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0.0, ?, 'A/R01/S01', 'Pending', '', ?, 0.0, ?, ?, ?)
+					size_spec, rate, attrs_json, created_at
+				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0.0, ?, 'A/R01/S01', 'Pending', '', ?, 0.0, ?, ?, ?, ?)
 			`, bundleID, bundleCode, parentLotID, parentCode, i, numBundles,
-				inwardType, itemName, colorName, invoiceGsm,
-				string(qrPayloadJSON), sizeSpec, rate, now,
+				inwardType, itemName, colorName, invoicedQty, initGsm,
+				string(qrPayloadJSON), sizeSpec, rate, marshalBundleAttrs(bAttrs), now,
 			)
 			if err != nil {
 				return GateInwardResult{}, fmt.Errorf("failed to insert bundle stub %s: %w", bundleCode, err)
@@ -745,10 +828,11 @@ func (s *Service) GateInward(p GateInwardPayload) (GateInwardResult, error) {
 
 			// Graph Node: BUNDLE
 			bundleProps := map[string]any{
-				"bundle_code": bundleCode,
-				"sequence":    i,
-				"total":       numBundles,
-				"qc_status":   "Pending",
+				"bundle_code":  bundleCode,
+				"sequence":     i,
+				"total":        numBundles,
+				"qc_status":    "Pending",
+				"invoiced_qty": invoicedQty,
 			}
 			if _, err := s.graph.InsertNode(tx, graph.TypeBundle, bundleProps, bundleID); err != nil {
 				return GateInwardResult{}, fmt.Errorf("failed to insert bundle graph node: %w", err)
@@ -760,12 +844,14 @@ func (s *Service) GateInward(p GateInwardPayload) (GateInwardResult, error) {
 			}
 
 			createdStubs = append(createdStubs, BundleStubInfo{
-				BundleCode: bundleCode,
-				Sequence:   i,
-				Total:      numBundles,
-				SizeSpec:   sizeSpec,
-				Rate:       rate,
-				Status:     "Pending",
+				BundleCode:  bundleCode,
+				Sequence:    i,
+				Total:       numBundles,
+				InvoicedQty: invoicedQty,
+				SizeSpec:    sizeSpec,
+				Rate:        rate,
+				Attrs:       bAttrs,
+				Status:      "Pending",
 			})
 		}
 	}
@@ -932,15 +1018,34 @@ func (s *Service) RecordFloorCount(p FloorCountPayload) (FloorCountResult, error
 			return FloorCountResult{}, fmt.Errorf("bundle %s not found in lot %s: %w", b.BundleCode, parentCode, err)
 		}
 
+		bAttrsStr := ""
+		if len(b.Attrs) > 0 {
+			if raw, mErr := json.Marshal(b.Attrs); mErr == nil {
+				bAttrsStr = string(raw)
+			}
+		}
+		measuredGsm := b.MeasuredGsm
+		measuredDia := b.MeasuredDia
+		if !strings.EqualFold(inwardType, "Fabric") {
+			measuredGsm = 0
+			measuredDia = 0
+		}
+
 		_, err = tx.Exec(`
 			UPDATE bundles
 			SET inward_weight_qty = ?, available_qty = ?, location_bin = ?,
+			    invoiced_qty = CASE WHEN ? > 0 THEN ? ELSE invoiced_qty END,
 			    measured_gsm = ?, measured_dia = ?, size_spec = COALESCE(NULLIF(?, ''), size_spec),
-			    rate = CASE WHEN ? > 0 THEN ? ELSE rate END, bundle_comment = ?
+			    rate = CASE WHEN ? > 0 THEN ? ELSE rate END,
+			    attrs_json = CASE WHEN ? != '' THEN ? ELSE attrs_json END,
+			    bundle_comment = ?
 			WHERE id = ?
 		`, b.CountedQty, b.CountedQty, loc,
-			b.MeasuredGsm, b.MeasuredDia, b.SizeSpec,
-			b.Rate, b.Rate, b.Comment, bID,
+			b.InvoicedQty, b.InvoicedQty,
+			measuredGsm, measuredDia, b.SizeSpec,
+			b.Rate, b.Rate,
+			bAttrsStr, bAttrsStr,
+			b.Comment, bID,
 		)
 		if err != nil {
 			return FloorCountResult{}, fmt.Errorf("failed to update bundle %s: %w", b.BundleCode, err)
@@ -1309,7 +1414,9 @@ func (s *Service) ResolveDiscrepancy(parentCode, action, remarks string) (map[st
 func (s *Service) SearchInvoices(query string) ([]InwardInvoice, error) {
 	clean := strings.TrimSpace(query)
 	sqlQuery := `
-		SELECT i.id, i.invoice_no, i.vendor_name, i.invoice_date, i.invoice_qty, i.invoice_amount,
+		SELECT i.id, i.invoice_no, i.vendor_name, i.invoice_date,
+		       COALESCE(NULLIF(i.inward_type, ''), (SELECT p.inward_type FROM parent_inward_lots p WHERE p.invoice_no = i.invoice_no LIMIT 1), ''),
+		       i.invoice_qty, i.invoice_amount,
 		       COALESCE(i.uom, 'Kgs'), COALESCE(i.currency, 'INR'), COALESCE(i.remarks, ''), i.created_at,
 		       COALESCE((SELECT GROUP_CONCAT(p.parent_code) FROM parent_inward_lots p WHERE p.invoice_no = i.invoice_no), ''),
 		       COALESCE((SELECT SUM(p.invoice_qty) FROM parent_inward_lots p WHERE p.invoice_no = i.invoice_no), 0)
@@ -1334,7 +1441,7 @@ func (s *Service) SearchInvoices(query string) ([]InwardInvoice, error) {
 		var inv InwardInvoice
 		var rawLots string
 		if err := rows.Scan(
-			&inv.ID, &inv.InvoiceNo, &inv.VendorName, &inv.InvoiceDate, &inv.InvoiceQty, &inv.InvoiceAmount,
+			&inv.ID, &inv.InvoiceNo, &inv.VendorName, &inv.InvoiceDate, &inv.InwardType, &inv.InvoiceQty, &inv.InvoiceAmount,
 			&inv.UOM, &inv.Currency, &inv.Remarks, &inv.CreatedAt, &rawLots, &inv.TotalLotsQty,
 		); err != nil {
 			return nil, err
@@ -1357,7 +1464,9 @@ func (s *Service) GetInvoice(invoiceNo string) (*InwardInvoice, error) {
 	var inv InwardInvoice
 	var rawLots string
 	err := s.db.QueryRow(`
-		SELECT i.id, i.invoice_no, i.vendor_name, i.invoice_date, i.invoice_qty, i.invoice_amount,
+		SELECT i.id, i.invoice_no, i.vendor_name, i.invoice_date,
+		       COALESCE(NULLIF(i.inward_type, ''), (SELECT p.inward_type FROM parent_inward_lots p WHERE p.invoice_no = i.invoice_no LIMIT 1), ''),
+		       i.invoice_qty, i.invoice_amount,
 		       COALESCE(i.uom, 'Kgs'), COALESCE(i.currency, 'INR'), COALESCE(i.remarks, ''), i.created_at,
 		       COALESCE((SELECT GROUP_CONCAT(p.parent_code) FROM parent_inward_lots p WHERE p.invoice_no = i.invoice_no), ''),
 		       COALESCE((SELECT SUM(p.invoice_qty) FROM parent_inward_lots p WHERE p.invoice_no = i.invoice_no), 0)
@@ -1365,7 +1474,7 @@ func (s *Service) GetInvoice(invoiceNo string) (*InwardInvoice, error) {
 		WHERE i.invoice_no = ?
 		LIMIT 1
 	`, clean).Scan(
-		&inv.ID, &inv.InvoiceNo, &inv.VendorName, &inv.InvoiceDate, &inv.InvoiceQty, &inv.InvoiceAmount,
+		&inv.ID, &inv.InvoiceNo, &inv.VendorName, &inv.InvoiceDate, &inv.InwardType, &inv.InvoiceQty, &inv.InvoiceAmount,
 		&inv.UOM, &inv.Currency, &inv.Remarks, &inv.CreatedAt, &rawLots, &inv.TotalLotsQty,
 	)
 	if err == sql.ErrNoRows {
@@ -1505,9 +1614,9 @@ func (s *Service) GetLot(parentCode string) (LotDetail, error) {
 	bundleRows, err := s.db.Query(`
 		SELECT 
 			id, bundle_code, parent_code, bundle_sequence, total_bundles,
-			item_type, item_name, COALESCE(color_name, ''), inward_weight_qty,
+			item_type, item_name, COALESCE(color_name, ''), COALESCE(invoiced_qty, 0), inward_weight_qty,
 			COALESCE(measured_gsm, 0), COALESCE(measured_dia, 0),
-			COALESCE(size_spec, ''), COALESCE(rate, 0), location_bin,
+			COALESCE(size_spec, ''), COALESCE(rate, 0), COALESCE(attrs_json, '{}'), location_bin,
 			qc_status, COALESCE(qc_remarks, ''), COALESCE(qc_image_url, ''),
 			COALESCE(qc_audio_url, ''), COALESCE(qc_transcript, ''),
 			COALESCE(qc_inspected_at, 0), COALESCE(bundle_comment, ''), COALESCE(qr_payload, '{}')
@@ -1520,20 +1629,28 @@ func (s *Service) GetLot(parentCode string) (LotDetail, error) {
 	}
 	defer bundleRows.Close()
 
-	var bundles []BundleDetail
+	bundles := make([]BundleDetail, 0)
 	for bundleRows.Next() {
 		var b BundleDetail
+		var bAttrsStr string
 		err := bundleRows.Scan(
 			&b.ID, &b.BundleCode, &b.ParentCode, &b.BundleSequence, &b.TotalBundles,
-			&b.ItemType, &b.ItemName, &b.ColorName, &b.InwardQty,
+			&b.ItemType, &b.ItemName, &b.ColorName, &b.InvoicedQty, &b.InwardQty,
 			&b.MeasuredGsm, &b.MeasuredDia,
-			&b.SizeSpec, &b.Rate, &b.LocationBin,
+			&b.SizeSpec, &b.Rate, &bAttrsStr, &b.LocationBin,
 			&b.QcStatus, &b.QcRemarks, &b.QcImageUrl,
 			&b.QcAudioUrl, &b.QcTranscript,
 			&b.QcInspectedAt, &b.BundleComment, &b.QRPayload,
 		)
 		if err != nil {
 			return LotDetail{}, err
+		}
+		b.Attrs = make(map[string]any)
+		if bAttrsStr != "" {
+			_ = json.Unmarshal([]byte(bAttrsStr), &b.Attrs)
+		}
+		if b.InvoicedQty == 0 && item.InvoiceQty > 0 && b.TotalBundles > 0 {
+			b.InvoicedQty = math.Round((item.InvoiceQty/float64(b.TotalBundles))*1000) / 1000
 		}
 		bundles = append(bundles, b)
 	}
@@ -1550,7 +1667,7 @@ func (s *Service) GetLot(parentCode string) (LotDetail, error) {
 		WHERE parent_code = ?
 		ORDER BY recorded_at DESC
 	`, cleanCode)
-	var reconciliations []map[string]any
+	reconciliations := make([]map[string]any, 0)
 	if err == nil {
 		defer recRows.Close()
 		for recRows.Next() {
@@ -1587,7 +1704,7 @@ func (s *Service) GetLot(parentCode string) (LotDetail, error) {
 		WHERE parent_code = ?
 		ORDER BY inspected_at DESC
 	`, cleanCode)
-	var inspections []map[string]any
+	inspections := make([]map[string]any, 0)
 	if err == nil {
 		defer inspRows.Close()
 		for inspRows.Next() {

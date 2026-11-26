@@ -33,6 +33,8 @@ func TestMasterCatalogConsolidation(t *testing.T) {
 		"../../../migrations/009_clean_foundational_excel_truth.sql",
 		"../../../migrations/010_sample_development_and_product_creation.sql",
 		"../../../migrations/011_enrich_gender_sizes_and_dropdown_relationships.sql",
+		"../../../migrations/013_enrich_attributes_and_schema.sql",
+		"../../../migrations/014_backfill_seeded_bundles_and_fabric_types.sql",
 	}
 	for _, mFile := range migrations {
 		content, err := os.ReadFile(mFile)
@@ -97,6 +99,21 @@ func TestMasterCatalogConsolidation(t *testing.T) {
 	clients := masters["clients"].([]Entity)
 	if len(clients) < 80 {
 		t.Errorf("expected >= 80 clients, got %d", len(clients))
+	}
+
+	trimElastics := masters["trim_elastics"].([]MasterItem)
+	if len(trimElastics) < 7 {
+		t.Errorf("expected >= 7 trim_elastics from Excel, got %d", len(trimElastics))
+	}
+	packagingPolybagSizes := masters["packaging_polybag_sizes"].([]MasterItem)
+	if len(packagingPolybagSizes) < 6 {
+		t.Errorf("expected >= 6 packaging_polybag_sizes from Excel, got %d", len(packagingPolybagSizes))
+	}
+	cartonSizes := masters["packaging_carton_sizes"].([]MasterItem)
+	for _, item := range cartonSizes {
+		if item.DisplayName == "Carton" || item.DisplayName == "DHL" || item.DisplayName == "FPCC" || item.DisplayName == "blank" {
+			t.Errorf("expected misplaced label %q cleaned from packaging_carton_sizes", item.DisplayName)
+		}
 	}
 
 	t.Logf("✓ Successfully validated consolidated masters: %d vendors, %d clients, %d locations, %d UOMs, %d genders, %d inward types",

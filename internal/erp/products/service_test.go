@@ -22,7 +22,7 @@ func setupTestDB(t *testing.T) (*db.DB, *Service) {
 		t.Fatalf("failed to connect to test db: %v", err)
 	}
 
-	// Apply migrations 001 through 010
+	// Apply migrations 001 through 011, 013
 	migrationFiles := []string{
 		"migrations/001_initial_graph.sql",
 		"migrations/002_seed_masters.sql",
@@ -34,6 +34,8 @@ func setupTestDB(t *testing.T) (*db.DB, *Service) {
 		"migrations/008_consolidate_master_dropdowns.sql",
 		"migrations/009_clean_foundational_excel_truth.sql",
 		"migrations/010_sample_development_and_product_creation.sql",
+		"migrations/011_enrich_gender_sizes_and_dropdown_relationships.sql",
+		"migrations/013_enrich_attributes_and_schema.sql",
 	}
 
 	for _, mFile := range migrationFiles {
@@ -311,5 +313,104 @@ func TestClientProductPricing(t *testing.T) {
 	}
 	if list[0].ContractedPrice != 725.50 {
 		t.Errorf("expected price 725.50, got %f", list[0].ContractedPrice)
+	}
+}
+
+func TestEnrichedSampleAttrsAndProductMultiSizesPharmas(t *testing.T) {
+	db, svc := setupTestDB(t)
+	defer db.Close()
+
+	sampleRes, err := svc.CreateSampleDevelopment(SampleDevelopmentPayload{
+		ClientID:        "ent_amara_raja",
+		ClientName:      "Amara Raja Energy & Mobility Limited",
+		ProductGenre:    "Jackets",
+		TempProductName: "Tech Softshell Jacket",
+		Colors:          []string{"Angora", "Classic Navy"},
+		Fabrics: []SampleFabricItem{
+			{
+				FabricName: "Venus",
+				LotNo:      "LOT-881",
+				Average:    0.75,
+				Attrs:      map[string]any{"fabricType": "Fabric", "fabricGeneric": "Bonded", "composition": "95%Poly 5%SP", "gsm": 260, "dia": "60\""},
+			},
+		},
+		Trims: []SampleTrimItem{
+			{
+				TrimName: "Flat cord",
+				Average:  1.4,
+				Attrs:    map[string]any{"trimType": "Cord", "size": "54\"", "cordEnd": "metal silver", "color": "Black"},
+			},
+		},
+		Zips: []SampleZipItem{
+			{
+				ZipName:      "Waterproof",
+				LengthAndQty: "S-L: 68cm",
+				Attrs:        map[string]any{"zipType": "Waterproof", "teethSize": "8.0", "slider": "DA8DR4", "closure": "open ended", "finish": "Matt silver", "tapeColor": "Black"},
+			},
+		},
+		Labels: []SampleLabelItem{
+			{
+				LabelName: "ETTU",
+				Attrs:     map[string]any{"labelCategory": "Brand Label", "labelGenre": "Woven", "labelDescription": "ETTU +Size Navy/aqua", "baseColor": "White", "textColor": "Classic Navy"},
+			},
+		},
+		Pharmas: []SamplePharmaItem{
+			{BasePharmaNo: "PH-JKT-01", NewPharmaNo: "PH-JKT-01-R1"},
+			{BasePharmaNo: "PH-JKT-02", NewPharmaNo: "PH-JKT-02-R1"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateSampleDevelopment failed: %v", err)
+	}
+
+	sDetail, err := svc.GetSampleDevelopment(sampleRes["id"].(string))
+	if err != nil {
+		t.Fatalf("GetSampleDevelopment failed: %v", err)
+	}
+	if len(sDetail.Colors) != 2 || sDetail.Colors[1] != "Classic Navy" {
+		t.Errorf("expected 2 sample colors, got %+v", sDetail.Colors)
+	}
+	if sDetail.Zips[0].Attrs["teethSize"] != "8.0" {
+		t.Errorf("expected zip teethSize 8.0, got %+v", sDetail.Zips[0].Attrs)
+	}
+	if sDetail.Trims[0].Attrs["cordEnd"] != "metal silver" {
+		t.Errorf("expected trim cordEnd 'metal silver', got %+v", sDetail.Trims[0].Attrs)
+	}
+	if sDetail.Labels[0].Attrs["labelGenre"] != "Woven" {
+		t.Errorf("expected labelGenre Woven, got %+v", sDetail.Labels[0].Attrs)
+	}
+
+	prodRes, err := svc.CreateMasterProduct(CreateProductPayload{
+		ProductName:           "Tech Softshell Jacket Pro",
+		Genre:                 "Jackets",
+		BrandLabel:            "ETTU",
+		GarmentSpecifications: "Full-zip front | Drawcord adjustable hood",
+		Composition:           "95%Poly 5%SP",
+		MRP:                   3499,
+		SampleDevelopmentID:   sDetail.ID,
+		Genders: []ProductGenderItem{
+			{
+				Gender:    "Men",
+				Sizes:     []string{"S", "M", "L", "XL"},
+				PharmaNos: []string{"PH-JKT-01-R1", "PH-JKT-02-R1"},
+				ColorImages: []map[string]any{
+					{"colorName": "Angora", "images": []string{"/uploads/m_angora_1.jpg"}},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateMasterProduct failed: %v", err)
+	}
+	prodDetail, err := svc.GetMasterProduct(prodRes["id"].(string))
+	if err != nil {
+		t.Fatalf("GetMasterProduct failed: %v", err)
+	}
+	g0 := prodDetail.Genders[0]
+	if len(g0.Sizes) != 4 || g0.Sizes[2] != "L" {
+		t.Errorf("expected 4 chosen sizes [S M L XL], got %+v", g0.Sizes)
+	}
+	if len(g0.PharmaNos) != 2 || g0.PharmaNos[1] != "PH-JKT-02-R1" {
+		t.Errorf("expected 2 pharmaNos, got %+v", g0.PharmaNos)
 	}
 }

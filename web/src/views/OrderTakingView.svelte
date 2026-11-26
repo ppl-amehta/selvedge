@@ -172,7 +172,8 @@
       subCategory: 'Polo',
       productName: '3 Way polo',
       colorName: 'Classic Navy',
-      fabricName: 'Pique',
+      fabricName: 'Venus',
+      fabricComposition: '100%Poly',
       size: '',
       unitPrice: 450.0,
       totalQty: 100,
@@ -180,6 +181,7 @@
       clientRemarks: '',
       productImageUrl: '',
       brandLabel: 'ETTU',
+      brandLabelGenre: 'Woven',
       brandLabelDesc: 'ETTU +Size Navy/aqua',
       additionalLabels: [
         { labelType: 'washcare Label', description: 'made in india white/black', genre: 'Woven' }
@@ -230,6 +232,7 @@
         productName: prev.productName || '',
         colorName: prev.colorName || '',
         fabricName: prev.fabricName || '',
+        fabricComposition: prev.fabricComposition || '',
         size: prev.size || (isNonApp ? '500ml' : ''),
         unitPrice: prev.unitPrice || 0,
         totalQty: 0, // NEVER COPY QUANTITIES: strictly 0
@@ -237,6 +240,7 @@
         clientRemarks: prev.clientRemarks || '',
         productImageUrl: prev.productImageUrl || '',
         brandLabel: prev.brandLabel || 'ETTU',
+        brandLabelGenre: prev.brandLabelGenre || 'Woven',
         brandLabelDesc: prev.brandLabelDesc || '',
         additionalLabels: clonedAdditionalLabels,
         mainLabel: prev.mainLabel || '',
@@ -276,9 +280,11 @@
       productName: src.productName,
       colorName: src.colorName,
       fabricName: src.fabricName,
+      fabricComposition: src.fabricComposition,
       size: src.size || dest.size,
       unitPrice: src.unitPrice,
       brandLabel: src.brandLabel,
+      brandLabelGenre: src.brandLabelGenre || 'Woven',
       brandLabelDesc: src.brandLabelDesc,
       additionalLabels: clonedAdditionalLabels,
       mainLabel: src.mainLabel,
@@ -486,6 +492,7 @@
 
   // Handle Specs Cloning
   function handleApplyClonedSpecs(ord) {
+    if (!ord) return;
     clientName = ord.client_name || '';
     contactPerson = ord.contact_person || '';
     phone = ord.phone || '';
@@ -497,17 +504,48 @@
     freightMode = ord.freight_mode || 'Surface';
     freightCost = ord.freight_cost || 'Extra';
 
-    if (ord.items && ord.items.length > 0) {
-      items = ord.items.map(it => ({
-        ...it,
-        id: 'it_cloned_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
-        // STRICT REQUIREMENT: DO NOT COPY QUANTITIES
-        totalQty: 0,
-        matrix: it.category === 'Apparel' ? { Men: {}, Women: {} } : { General: {} },
-        personalizations: (it.personalizations || []).map(p => ({ ...p, qty: 0 })),
-        isLocked: false,
-        isCollapsed: false
-      }));
+    if (Array.isArray(ord.items) && ord.items.length > 0) {
+      items = ord.items.map(it => {
+        const isNonApp = it.category === 'Non Apparel' || it.category === 'Non-Apparel';
+        const clonedBrandings = Array.isArray(it.brandings)
+          ? it.brandings.map(b => ({
+              ...b,
+              id: 'bnd_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+              brandingFileUrl: b.brandingFileUrl || ''
+            }))
+          : [];
+        const clonedPersonalizations = Array.isArray(it.personalizations)
+          ? it.personalizations.map(p => ({
+              ...p,
+              id: 'prs_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+              qty: 0
+            }))
+          : [];
+        const clonedAddLabels = Array.isArray(it.additionalLabels)
+          ? it.additionalLabels.map(al => ({ ...al }))
+          : [];
+
+        return {
+          ...it,
+          id: 'it_cloned_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+          category: isNonApp ? 'Non Apparel' : 'Apparel',
+          subCategory: it.subCategory || (isNonApp ? 'Drinkwear' : 'Polo'),
+          fabricName: it.fabricName || '',
+          fabricComposition: it.fabricComposition || '',
+          brandLabel: it.brandLabel || it.mainLabel || '',
+          brandLabelGenre: it.brandLabelGenre || 'Woven',
+          brandLabelDesc: it.brandLabelDesc || '',
+          additionalLabels: clonedAddLabels,
+          // STRICT REQUIREMENT: DO NOT COPY QUANTITIES
+          totalQty: 0,
+          size: isNonApp ? (it.size || '') : '',
+          matrix: isNonApp ? { General: {} } : { Men: {}, Women: {} },
+          brandings: clonedBrandings,
+          personalizations: clonedPersonalizations,
+          isLocked: false,
+          isCollapsed: false
+        };
+      });
     }
   }
 
@@ -617,6 +655,7 @@
             productName: it.productName,
             colorName: it.colorName,
             fabricName: isNonApp ? '' : it.fabricName,
+            fabricComposition: isNonApp ? '' : (it.fabricComposition || ''),
             size: it.size || '',
             unitPrice: parseFloat(it.unitPrice) || 0.0,
             totalQty: parseInt(it.totalQty, 10) || 0,
@@ -624,6 +663,7 @@
             clientRemarks: it.clientRemarks,
             productImageUrl: it.productImageUrl,
             brandLabel: it.brandLabel || '',
+            brandLabelGenre: it.brandLabelGenre || 'Woven',
             brandLabelDesc: it.brandLabelDesc || '',
             additionalLabels: it.additionalLabels || [],
             mainLabel: mainLbl,
@@ -1048,10 +1088,10 @@
                     />
                   </div>
 
-                  <!-- Fabric Name (Only for Apparel) -->
+                  <!-- Fabric Name & Fabric Composition (Only for Apparel) -->
                   {#if item.category === 'Apparel'}
                     <div class="form-group">
-                      <label for="item-fab-{item.id}">Fabric Composition (187+ Master Fabrics)</label>
+                      <label for="item-fab-{item.id}">Fabric Name (FPCC Master Fabrics)</label>
                       <Combobox
                         id="item-fab-{item.id}"
                         items={masters.fabrics || []}
@@ -1059,7 +1099,20 @@
                         displayKey="display_name"
                         valueKey="display_name"
                         bind:value={item.fabricName}
-                        placeholder="Search fabric knit/weave..."
+                        placeholder="Select FPCC fabric (Venus, Classic Fleece...)"
+                      />
+                    </div>
+
+                    <div class="form-group">
+                      <label for="item-fabcomp-{item.id}">Fabric Composition (Inward Composition Master)</label>
+                      <Combobox
+                        id="item-fabcomp-{item.id}"
+                        items={masters.compositions || []}
+                        category="composition"
+                        displayKey="display_name"
+                        valueKey="display_name"
+                        bind:value={item.fabricComposition}
+                        placeholder="Select fiber blend (95%Poly 5%SP, 100%Cot...)"
                       />
                     </div>
                   {/if}
@@ -1204,6 +1257,19 @@
                     </div>
 
                     <div class="form-group">
+                      <label for="item-brand-genre-{item.id}">Brand Label Genre</label>
+                      <select
+                        id="item-brand-genre-{item.id}"
+                        class="select-control"
+                        bind:value={item.brandLabelGenre}
+                      >
+                        {#each labelGenres as lg}
+                          <option value={lg}>{lg}</option>
+                        {/each}
+                      </select>
+                    </div>
+
+                    <div class="form-group">
                       <label for="item-brand-desc-{item.id}">Brand Label Description / Tech Specs</label>
                       <Combobox
                         id="item-brand-desc-{item.id}"
@@ -1216,7 +1282,7 @@
 
                   <!-- Additional Labels Multi-Select Chips -->
                   <div class="additional-labels-wrap">
-                    <label class="additional-labels-label">Additional Labels (Multi-Select):</label>
+                    <span class="additional-labels-label">Additional Labels (Multi-Select):</span>
                     <div class="additional-labels-chips">
                       {#each additionalLabelTypes as aType}
                         {@const isSelected = (item.additionalLabels || []).some(al => al.labelType === aType)}
@@ -1876,7 +1942,7 @@
 
   .brand-label-grid {
     display: grid;
-    grid-template-columns: 1fr 2fr;
+    grid-template-columns: 1fr 0.8fr 1.6fr;
     gap: 14px;
   }
 

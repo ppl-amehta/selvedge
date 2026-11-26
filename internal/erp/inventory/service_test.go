@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -32,8 +33,17 @@ func setupTestDB(t *testing.T) (*sql.DB, *inventory.Service) {
 	schemaFiles := []string{
 		"../../../migrations/001_initial_graph.sql",
 		"../../../migrations/002_seed_masters.sql",
+		"../../../migrations/003_multi_product_orders.sql",
 		"../../../migrations/004_three_stage_inward_pipeline.sql",
+		"../../../migrations/005_order_prep_and_planning.sql",
+		"../../../migrations/006_floor_cutting_station.sql",
 		"../../../migrations/007_invoices_and_multi_fabric_lots.sql",
+		"../../../migrations/008_consolidate_master_dropdowns.sql",
+		"../../../migrations/009_clean_foundational_excel_truth.sql",
+		"../../../migrations/010_sample_development_and_product_creation.sql",
+		"../../../migrations/011_enrich_gender_sizes_and_dropdown_relationships.sql",
+		"../../../migrations/013_enrich_attributes_and_schema.sql",
+		"../../../migrations/014_backfill_seeded_bundles_and_fabric_types.sql",
 	}
 
 	for _, sf := range schemaFiles {
@@ -308,9 +318,38 @@ func TestMultiProductFabric_And_InvoiceSplitting(t *testing.T) {
 		t.Errorf("Unexpected bundle codes: %+v", res1.Bundles)
 	}
 
-	// 2. Inward another lot (Zips) tagged to the SAME invoice INV-SPLIT-999
+	// Verify default auto-distribution of per-bundle invoicedQty across the 3 bundles (150 / 3 = 50)
+	if res1.Bundles[0].InvoicedQty != 50.0 || res1.Bundles[2].InvoicedQty != 50.0 {
+		t.Errorf("Expected default 50.0 invoicedQty per bundle, got %+v", res1.Bundles)
+	}
+
+	// 2. Inward a second Fabric lot (rib/cuff component) tagged to the SAME invoice INV-SPLIT-999 -> MUST SUCCEED
 	res2, err := svc.GateInward(inventory.GateInwardPayload{
 		ParentCode:    "261028-B",
+		InwardDate:    "2026-10-28",
+		InwardType:    "Fabric",
+		VendorName:    "Apex Textiles Ltd",
+		InvoiceNo:     "INV-SPLIT-999",
+		InvoiceQty:    50.0,
+		InvoiceAmount: 19000.0,
+		UOM:           "Kgs",
+		VendorProduct: "Collar Trim Fabric",
+		FpccProduct:   "Venus Collar",
+		NoOfBundles:   2,
+	})
+	if err != nil {
+		t.Fatalf("GateInward second Fabric lot under same invoice failed: %v", err)
+	}
+	if res2.ParentCode != "261028-B" {
+		t.Errorf("Expected 261028-B, got %s", res2.ParentCode)
+	}
+	if res2.Bundles[0].InvoicedQty != 25.0 || res2.Bundles[1].InvoicedQty != 25.0 {
+		t.Errorf("Expected 25.0 invoicedQty per bundle for 50/2, got %+v", res2.Bundles)
+	}
+
+	// 2b. Attempting to mix a different Inward Type ('Zips') on the same invoice MUST BE BLOCKED
+	_, err = svc.GateInward(inventory.GateInwardPayload{
+		ParentCode:    "261028-Z",
 		InwardDate:    "2026-10-28",
 		InwardType:    "Zips",
 		VendorName:    "Apex Textiles Ltd",
@@ -322,11 +361,8 @@ func TestMultiProductFabric_And_InvoiceSplitting(t *testing.T) {
 		FpccProduct:   "Metal Zip 65cm",
 		NoOfBundles:   2,
 	})
-	if err != nil {
-		t.Fatalf("GateInward second lot under same invoice failed: %v", err)
-	}
-	if res2.ParentCode != "261028-B" {
-		t.Errorf("Expected 261028-B, got %s", res2.ParentCode)
+	if err == nil || !strings.Contains(err.Error(), "only one inward type per invoice") {
+		t.Fatalf("Expected error blocking mixed inward types on same invoice, got: %v", err)
 	}
 
 	// 3. Search Invoices by invoiceNo prefix
@@ -341,17 +377,20 @@ func TestMultiProductFabric_And_InvoiceSplitting(t *testing.T) {
 	if inv.InvoiceNo != "INV-SPLIT-999" {
 		t.Errorf("Expected invoice INV-SPLIT-999, got %s", inv.InvoiceNo)
 	}
+	if inv.InwardType != "Fabric" {
+		t.Errorf("Expected invoice InwardType Fabric, got %s", inv.InwardType)
+	}
 	if len(inv.TaggedLots) != 2 {
 		t.Errorf("Expected 2 tagged lots under invoice, got %d (%v)", len(inv.TaggedLots), inv.TaggedLots)
 	}
 
-	// 4. Test non-fabric rejection if >1 product provided
+	// 4. Test non-fabric rejection if >1 product provided (on its own Zips invoice)
 	_, err = svc.GateInward(inventory.GateInwardPayload{
 		ParentCode:    "261028-C",
 		InwardDate:    "2026-10-28",
 		InwardType:    "Zips",
 		VendorName:    "Apex Textiles Ltd",
-		InvoiceNo:     "INV-SPLIT-999",
+		InvoiceNo:     "INV-ZIPS-ONLY-1",
 		InvoiceQty:    10.0,
 		UOM:           "Pcs",
 		FabricProducts: []inventory.FabricProductItem{
