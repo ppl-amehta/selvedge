@@ -208,3 +208,64 @@ func TestCuttingFloorWorkflow(t *testing.T) {
 	t.Logf("✓ Bundle slip printed: Code=%s, Size=%s, Qty=%d, QRData=%s",
 		slipData.BundleCode, slipData.Size, slipData.Pieces, slipData.QRData)
 }
+
+func TestCuttingJobLookupBySyntheticIDAndCaseInsensitiveRemnantPrefix(t *testing.T) {
+	database, svc := setupTestDB(t)
+	defer database.Close()
+
+	now := graph.NowMs()
+	_, err := database.Exec(`
+		INSERT INTO orders (
+			id, production_order_no, sales_order_no, order_type, booking_date,
+			client_id, client_name, category, sub_category, product_name,
+			color_name, gender, unit_price, total_qty, target_etd, status,
+			created_at, updated_at
+		) VALUES ('ord_CJ_LOOKUP', '11260001', 'SO-1126', 'Bulk', '2026-11-26',
+			'c-001', 'ATC Tires Private Limited', 'Apparel', 'Polo', '3 Way polo',
+			'Navy Blue', 'Men', 450.0, 800, '2026-12-15', 'BOOKED', ?, ?)
+	`, now, now)
+	if err != nil {
+		t.Fatalf("insert order failed: %v", err)
+	}
+
+	for _, item := range []struct {
+		id, prod, color string
+		seq, qty        int
+		matrix          string
+	}{
+		{"oi_cj_1", "3 Way polo", "Navy Blue", 1, 400, `{"Men":{"M":200,"L":200}}`},
+		{"oi_cj_2", "Jute Tote Bag", "Natural", 2, 400, `{"General":{"Std":400}}`},
+	} {
+		_, err = database.Exec(`
+			INSERT INTO order_items (
+				id, order_id, item_sequence, category, sub_category, product_name,
+				color_name, fabric_name, unit_price, total_qty, client_etd, matrix_json, created_at
+			) VALUES (?, 'ord_CJ_LOOKUP', ?, 'Apparel', 'Polo', ?, ?, 'Pique', 450.0, ?, '2026-12-15', ?, ?)
+		`, item.id, item.seq, item.prod, item.color, item.qty, item.matrix, now)
+		if err != nil {
+			t.Fatalf("insert order item %s failed: %v", item.id, err)
+		}
+	}
+
+	// Synthetic IDs from ListCuttingOrders must initialize and return each distinct item cleanly.
+	detail2, err := svc.GetCuttingJob("CJ-11260001-2")
+	if err != nil {
+		t.Fatalf("GetCuttingJob(CJ-11260001-2) failed: %v", err)
+	}
+	if detail2.Job.OrderItemID != "oi_cj_2" || detail2.Job.ProductName != "Jute Tote Bag" || detail2.TotalTargetQty != 400 {
+		t.Fatalf("unexpected synthetic lookup result: %+v", detail2.Job)
+	}
+
+	rem, err := svc.RecordRemnant(RecordRemnantPayload{
+		Prefix:         "BIT",
+		SourceRollCode: "261126-A-1/2",
+		CuttingJobID:   detail2.Job.ID,
+		WeightKg:       1.5,
+	})
+	if err != nil {
+		t.Fatalf("RecordRemnant with uppercase prefix failed: %v", err)
+	}
+	if rem.Prefix != "Bit" {
+		t.Fatalf("expected canonical prefix 'Bit', got %q", rem.Prefix)
+	}
+}

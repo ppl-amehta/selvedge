@@ -62,3 +62,35 @@ func TestDatabaseConnectAndPragmas(t *testing.T) {
 		t.Errorf("expected 1 row committed, got count=%d, err=%v", count, err)
 	}
 }
+
+func TestSplitSQLStatementsAndAppliedMigrations(t *testing.T) {
+	script := `
+-- comment with ; semicolon
+INSERT INTO t (a, b) VALUES ('semi;colon', 'escaped''quote;here');
+/* block ; comment */
+UPDATE t SET a = "col;quoted" WHERE id = 1;
+`
+	stmts := splitSQLStatements(script)
+	if len(stmts) != 2 {
+		t.Fatalf("expected 2 statements, got %d: %#v", len(stmts), stmts)
+	}
+
+	dbPath := filepath.Join(t.TempDir(), "migrations_check.db")
+	database, err := Connect(dbPath)
+	if err != nil {
+		t.Fatalf("connect failed: %v", err)
+	}
+	defer database.Close()
+
+	if err := database.RunMigrations("migrations/001_test.sql", "CREATE TABLE IF NOT EXISTS demo (id TEXT PRIMARY KEY);"); err != nil {
+		t.Fatalf("RunMigrations failed: %v", err)
+	}
+
+	applied, err := database.ListAppliedMigrations()
+	if err != nil {
+		t.Fatalf("ListAppliedMigrations failed: %v", err)
+	}
+	if !applied["migrations/001_test.sql"] {
+		t.Fatalf("expected migrations/001_test.sql in applied map, got %#v", applied)
+	}
+}

@@ -865,7 +865,7 @@
           materialType: 'fabric',
           name: f.fabricName,
           average: f.average || (isNonApparel ? 1.0 : 0.35),
-          gsm: isNonApparel ? 0 : (parseFloat(f.attrs?.gsm) || 220),
+          gsm: isNonApparel ? 0 : (Number(f.attrs?.gsm) || 220),
           dia: isNonApparel ? 0 : (parseFloat(String(f.attrs?.dia || '').replace(/[^0-9.]/g, '')) || 32),
           zipLengthQty: ''
         });
@@ -1345,7 +1345,7 @@
         whyWeMadeThis: whyWeMadeThis,
         garmentSpecifications: normalizedSpecs,
         composition: composition,
-        mrp: parseFloat(mrp) || 0.0,
+        mrp: Number(mrp) || 0.0,
         sampleDevelopmentId: selectedSampleToPull,
         genders: normalizedGenders,
         materials: prodMaterials
@@ -1401,7 +1401,7 @@
         productId: cpProductId || cpProductName,
         productName: cpProductName,
         clientImageUrl: cpClientImageUrl,
-        contractedPrice: parseFloat(cpContractedPrice),
+        contractedPrice: Number(cpContractedPrice) || 0,
         comments: cpComments,
         effectiveDate: cpEffectiveDate
       };
@@ -1506,7 +1506,7 @@
                 id="sampleCategory"
                 class="input"
                 bind:value={sampleCategory}
-                onchange={(e) => handleSampleCategoryChange(e.target.value)}
+                onchange={(e) => handleSampleCategoryChange(e.currentTarget.value)}
               >
                 <option value="Apparel">Apparel</option>
                 <option value="Non Apparel">Non Apparel</option>
@@ -2314,7 +2314,7 @@
               <span class="pull-icon">📝</span>
               <span>Edit Existing Product:</span>
             </div>
-            <select class="input pull-select" onchange={(e) => selectProductToEdit(e.target.value)}>
+            <select class="input pull-select" onchange={(e) => selectProductToEdit(e.currentTarget.value)}>
               <option value="">-- Select Published Product to Edit --</option>
               {#each productList as p}
                 <option value={p.id} selected={prodId === p.id}>
@@ -2340,6 +2340,7 @@
               onchange={() => {
                 refreshSKU();
                 if (nonApparelGenres.includes(prodGenre)) {
+                  /** @type {Record<string, any>} */
                   const prev = prodGenders[0] || {};
                   const valid = getSizesForSampling('N/A', prodGenre);
                   prodGenders = [{
@@ -2616,7 +2617,7 @@
                     <div class="img-thumbnails-row">
                       {#each prodGenders[0].productImages as imgUrl, imgIdx}
                         <div class="img-thumbnail-chip">
-                          <img src={imgUrl} alt="Product view" onerror={(e) => { e.currentTarget.style.display = 'none'; }} />
+                          <img src={imgUrl} alt="Product view" onerror={(e) => { /** @type {HTMLImageElement} */ (e.currentTarget).style.display = 'none'; }} />
                           <button type="button" class="img-remove-btn" onclick={() => removeGenderProductImage(0, imgIdx)} title="Remove image">✕</button>
                         </div>
                       {/each}
@@ -2677,7 +2678,7 @@
                         <div class="img-thumbnails-row" style="margin-bottom: 0;">
                           {#each colorVar.images as cImg, cImgIdx}
                             <div class="img-thumbnail-chip">
-                              <img src={cImg} alt="{colorVar.colorName} view" onerror={(e) => { e.currentTarget.style.display = 'none'; }} />
+                              <img src={cImg} alt="{colorVar.colorName} view" onerror={(e) => { /** @type {HTMLImageElement} */ (e.currentTarget).style.display = 'none'; }} />
                               <button type="button" class="img-remove-btn" onclick={() => removeColorImage(0, cIdx, cImgIdx)}>✕</button>
                             </div>
                           {/each}
@@ -2799,7 +2800,7 @@
                     <div class="img-thumbnails-row">
                       {#each g.productImages as imgUrl, imgIdx}
                         <div class="img-thumbnail-chip">
-                          <img src={imgUrl} alt="{g.gender} product view" onerror={(e) => { e.currentTarget.style.display = 'none'; }} />
+                          <img src={imgUrl} alt="{g.gender} product view" onerror={(e) => { /** @type {HTMLImageElement} */ (e.currentTarget).style.display = 'none'; }} />
                           <button type="button" class="img-remove-btn" onclick={() => removeGenderProductImage(idx, imgIdx)} title="Remove image">✕</button>
                         </div>
                       {/each}
@@ -2860,7 +2861,7 @@
                           <div class="img-thumbnails-row" style="margin-bottom: 0;">
                             {#each colorVar.images as cImg, cImgIdx}
                               <div class="img-thumbnail-chip">
-                                <img src={cImg} alt="{g.gender} {colorVar.colorName} view" onerror={(e) => { e.currentTarget.style.display = 'none'; }} />
+                                <img src={cImg} alt="{g.gender} {colorVar.colorName} view" onerror={(e) => { /** @type {HTMLImageElement} */ (e.currentTarget).style.display = 'none'; }} />
                                 <button type="button" class="img-remove-btn" onclick={() => removeColorImage(idx, cIdx, cImgIdx)}>✕</button>
                               </div>
                             {/each}
@@ -3385,7 +3386,7 @@
     font-size: 13px;
   }
 
-  select.input optgroup, select.table-input optgroup, select.pull-select optgroup {
+  select.input optgroup {
     background-color: #0f172a;
     color: #38bdf8;
     font-weight: 700;

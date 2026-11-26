@@ -229,7 +229,7 @@
   }
 
   @media print {
-    body * {
+    :global(body *) {
       visibility: hidden;
     }
     .tags-grid, .tags-grid * {

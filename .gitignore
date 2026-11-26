@@ -19,3 +19,5 @@ data/uploads/
 node_modules/
 web/node_modules/
 
+.vercel
+.env*

@@ -206,11 +206,11 @@
         lineType: bomLineType,
         itemName: bomItemName,
         subType: bomSubType,
-        consumptionAvg: parseFloat(bomConsumptionAvg) || 0,
-        wastagePct: parseFloat(bomWastagePct) || 0,
+        consumptionAvg: Number(bomConsumptionAvg) || 0,
+        wastagePct: Number(bomWastagePct) || 0,
         uom: bomUom,
         unitQty: currentItem.totalQty,
-        ratePerUnit: parseFloat(bomRatePerUnit) || 0,
+        ratePerUnit: Number(bomRatePerUnit) || 0,
         comments: bomComments
       });
       if (window.showToast) window.showToast(`✓ BOM requirement calculated for ${bomItemName}`, 'success');
@@ -254,9 +254,9 @@
         materialType: poTargetBomLine.lineType,
         uom: poTargetBomLine.uom,
         requiredQty: poTargetBomLine.shortfallQty,
-        orderBufferQty: parseFloat(poBufferQty) || 0,
+        orderBufferQty: Number(poBufferQty) || 0,
         vendorName: poVendor,
-        estimatedRate: parseFloat(poEstRate) || 0,
+        estimatedRate: Number(poEstRate) || 0,
         requiredByDate: poRequiredBy
       });
       if (window.showToast) window.showToast(`✓ Purchase requisition ${res.poNo} generated!`, 'success');
@@ -342,7 +342,7 @@
 
       <div class="order-picker-box">
         <label for="order-select-dropdown" class="picker-label">Select Order for Prep:</label>
-        <select id="order-select-dropdown" class="order-select" bind:value={selectedOrderId} onchange={(e) => handleOrderSelect(e.target.value)}>
+        <select id="order-select-dropdown" class="order-select" bind:value={selectedOrderId} onchange={(e) => handleOrderSelect(e.currentTarget.value)}>
           {#each ordersList as o}
             <option value={o.id}>
               {o.productionOrderNo} ({o.clientName} - {o.totalQty} pcs) [{o.status}]
@@ -971,7 +971,7 @@
 <!-- Raise PO Modal -->
 {#if isPoModalOpen && poTargetBomLine}
   <div class="modal-backdrop" onclick={() => isPoModalOpen = false} role="presentation">
-    <div class="modal-card" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="-1">
+    <div class="modal-card" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.key === 'Escape' && (isPoModalOpen = false)} role="dialog" tabindex="-1">
       <div class="modal-head">
         <h3 class="modal-title">📦 Raise Procurement Requisition (PO)</h3>
         <button class="btn-icon" onclick={() => isPoModalOpen = false}>✕</button>
@@ -1016,8 +1016,8 @@
         </div>
 
         <div class="po-summary-banner">
-          Total Order PO Qty: <strong>{Math.round((poTargetBomLine.shortfallQty + (parseFloat(poBufferQty)||0))*100)/100} {poTargetBomLine.uom}</strong> •
-          Est. Valuation: <strong>₹{Math.round((poTargetBomLine.shortfallQty + (parseFloat(poBufferQty)||0)) * poEstRate)}</strong>
+          Total Order PO Qty: <strong>{Math.round((poTargetBomLine.shortfallQty + (Number(poBufferQty) || 0)) * 100) / 100} {poTargetBomLine.uom}</strong> •
+          Est. Valuation: <strong>₹{Math.round((poTargetBomLine.shortfallQty + (Number(poBufferQty) || 0)) * (Number(poEstRate) || 0))}</strong>
         </div>
       </div>
 
@@ -1034,7 +1034,7 @@
 <!-- Advance State Modal -->
 {#if isAdvanceModalOpen}
   <div class="modal-backdrop" onclick={() => isAdvanceModalOpen = false} role="presentation">
-    <div class="modal-card" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="-1">
+    <div class="modal-card" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.key === 'Escape' && (isAdvanceModalOpen = false)} role="dialog" tabindex="-1">
       <div class="modal-head">
         <h3 class="modal-title">⚡ Advance Order Workflow Gate</h3>
         <button class="btn-icon" onclick={() => isAdvanceModalOpen = false}>✕</button>

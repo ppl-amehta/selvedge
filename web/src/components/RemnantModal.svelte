@@ -60,8 +60,9 @@
 
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
             <div class="form-group">
-              <label class="form-label">Original Bundle Code <span class="required">*</span></label>
+              <label for="remnant-modal-bundle-code" class="form-label">Original Bundle Code <span class="required">*</span></label>
               <input
+                id="remnant-modal-bundle-code"
                 type="text"
                 class="input-control input-mono"
                 placeholder="e.g. 261019-A-1/4"
@@ -71,8 +72,8 @@
             </div>
 
             <div class="form-group">
-              <label class="form-label">Return Classification <span class="required">*</span></label>
-              <select class="select-control" bind:value={returnType}>
+              <label for="remnant-modal-return-type" class="form-label">Return Classification <span class="required">*</span></label>
+              <select id="remnant-modal-return-type" class="select-control" bind:value={returnType}>
                 <option value="bits">Bits / Usable Remnant (Prefix: Bit)</option>
                 <option value="reject">Reject / Defect Roll (Prefix: Rej)</option>
                 <option value="remnant">Standard Remnant</option>
@@ -82,8 +83,9 @@
 
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
             <div class="form-group">
-              <label class="form-label">Returned Weight (Kg) <span class="required">*</span></label>
+              <label for="remnant-modal-weight" class="form-label">Returned Weight (Kg) <span class="required">*</span></label>
               <input
+                id="remnant-modal-weight"
                 type="number"
                 class="input-control numeric"
                 step="0.01"
@@ -95,8 +97,9 @@
             </div>
 
             <div class="form-group">
-              <label class="form-label">Return Bin Location</label>
+              <label for="remnant-modal-location" class="form-label">Return Bin Location</label>
               <input
+                id="remnant-modal-location"
                 type="text"
                 class="input-control input-mono"
                 bind:value={location}
@@ -106,8 +109,9 @@
           </div>
 
           <div class="form-group">
-            <label class="form-label">Defect / Remnant Explanation</label>
+            <label for="remnant-modal-remarks" class="form-label">Defect / Remnant Explanation</label>
             <input
+              id="remnant-modal-remarks"
               type="text"
               class="input-control"
               placeholder="e.g. Lycra broken filament elastane drop at 18m"

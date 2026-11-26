@@ -13,4 +13,6 @@ declare module '*.svelte' {
 
 interface Window {
   showToast?: (message: string, type?: 'success' | 'error' | 'warning' | 'info') => void;
+  SpeechRecognition?: any;
+  webkitSpeechRecognition?: any;
 }

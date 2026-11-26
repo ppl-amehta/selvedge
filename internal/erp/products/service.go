@@ -518,6 +518,10 @@ func (s *Service) CreateSampleDevelopment(payload SampleDevelopmentPayload) (map
 		return nil, fmt.Errorf("failed to commit sample transaction: %w", err)
 	}
 
+	if s.workflow != nil {
+		_, _ = s.workflow.ProcessPendingEvents()
+	}
+
 	return map[string]any{
 		"success":       true,
 		"id":            sampleID,
@@ -943,6 +947,10 @@ func (s *Service) CreateMasterProduct(payload CreateProductPayload) (map[string]
 
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("failed to commit product creation tx: %w", err)
+	}
+
+	if s.workflow != nil {
+		_, _ = s.workflow.ProcessPendingEvents()
 	}
 
 	return map[string]any{

@@ -1,6 +1,22 @@
 // FPCC Selvedge Unified API Client
 const API_BASE = '/api';
 
+async function parseJsonSafe(res, fallbackMsg) {
+  const ct = res.headers.get('content-type') || '';
+  if (!ct.includes('application/json')) {
+    const txt = (await res.text().catch(() => '')).trim();
+    if (res.status === 413) {
+      throw new Error('File exceeds maximum serverless upload size (4 MB limit)');
+    }
+    throw new Error(txt ? `${fallbackMsg} (HTTP ${res.status})` : `${fallbackMsg} (HTTP ${res.status})`);
+  }
+  const json = await res.json();
+  if (!res.ok || json.success === false) {
+    throw new Error(json.error || fallbackMsg);
+  }
+  return json;
+}
+
 export const api = {
   async health() {
     const res = await fetch(`${API_BASE}/health`);
@@ -44,11 +60,7 @@ export const api = {
       method: 'POST',
       body: formData,
     });
-    const json = await res.json();
-    if (!res.ok || json.success === false) {
-      throw new Error(json.error || 'File upload failed');
-    }
-    return json;
+    return parseJsonSafe(res, 'File upload failed');
   },
 
   async createOrder(payload) {

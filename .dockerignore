@@ -3,10 +3,10 @@
 .github
 .agents
 .live
-data/*.db
-data/*.db-wal
-data/*.db-shm
-selvedge
+.vercel
+.env*
+/data/
+/selvedge
 *.log
 web/node_modules
 web/dist

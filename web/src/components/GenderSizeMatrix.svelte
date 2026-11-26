@@ -361,7 +361,7 @@
             value={matrix['General']?.[s] ?? ''}
             oninput={(e) => {
               if (!matrix['General']) matrix['General'] = {};
-              matrix['General'][s] = parseInt(e.target.value, 10) || 0;
+              matrix['General'][s] = parseInt(e.currentTarget.value, 10) || 0;
             }}
           />
         </div>
@@ -611,18 +611,11 @@
     color: #60a5fa;
   }
 
-  .row-sum-cell, .col-sum-cell {
+  .row-sum-cell {
     font-family: var(--font-mono);
     font-weight: 600;
     color: var(--text-muted);
     background: rgba(255, 255, 255, 0.02);
-  }
-
-  .grand-total-cell {
-    font-family: var(--font-mono);
-    font-weight: 800;
-    color: var(--accent-emerald);
-    background: rgba(16, 185, 129, 0.08);
   }
 
   .non-apparel-grid {

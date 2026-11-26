@@ -1,8 +1,10 @@
 <script>
   import { api } from '../api.js';
 
+  /** @type {{ id?: string, value?: any, category?: string, placeholder?: string, items?: any[], options?: any[] | null, displayKey?: string, valueKey?: string, allowCustom?: boolean, onSelect?: (val: any) => void, disabled?: boolean }} */
   let {
-    value = $bindable(''),
+    id = undefined,
+    value = $bindable(),
     category = 'item',
     placeholder = 'Type to search or select...',
     items = [],
@@ -14,6 +16,8 @@
     disabled = false
   } = $props();
 
+  const listboxId = 'cb-listbox-' + Math.random().toString(36).slice(2, 8);
+
   let isOpen = $state(false);
   let isFiltering = $state(false);
   let highlightedIndex = $state(-1);
@@ -23,7 +27,7 @@
   let dropdownEl = $state(null);
   let dropdownStyle = $state('');
 
-  let safeVal = $derived(value ?? '');
+  let safeVal = $derived(value !== null && value !== undefined ? String(value) : '');
 
   // Svelte 5 action to portal the dropdown directly to document.body,
   // bypassing any parent card, table, or stacking context trapping.
@@ -265,6 +269,7 @@
 <div class="combobox-wrapper" class:is-open={isOpen} bind:this={wrapperEl}>
   <div class="input-wrap">
     <input
+      {id}
       type="text"
       bind:this={inputEl}
       class="input-control"
@@ -276,6 +281,7 @@
       onkeydown={handleKeydown}
       autocomplete="off"
       role="combobox"
+      aria-controls={isOpen ? listboxId : undefined}
       aria-expanded={isOpen}
       aria-haspopup="listbox"
       aria-autocomplete="list"
@@ -306,6 +312,7 @@
 
   {#if isOpen}
     <div
+      id={listboxId}
       class="combobox-dropdown"
       use:portal
       bind:this={dropdownEl}
@@ -324,6 +331,7 @@
             class:highlighted={idx === highlightedIndex}
             class:selected={isSelected}
             onclick={() => selectOption(item)}
+            onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && selectOption(item)}
             role="option"
             aria-selected={isSelected}
             tabindex="-1"

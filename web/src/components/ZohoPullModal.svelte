@@ -49,7 +49,13 @@
 
 {#if isOpen}
   <div class="modal-backdrop" onclick={() => isOpen = false} role="presentation">
-    <div class="modal-card" onclick={(e) => e.stopPropagation()} role="dialog">
+    <div
+      class="modal-card"
+      onclick={(e) => e.stopPropagation()}
+      onkeydown={(e) => e.key === 'Escape' && (isOpen = false)}
+      role="dialog"
+      tabindex="-1"
+    >
       <div class="modal-head">
         <div class="title-group">
           <span class="badge">Zoho Books / Inventory API</span>

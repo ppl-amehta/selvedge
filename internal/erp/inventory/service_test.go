@@ -442,3 +442,118 @@ func TestMultiProductFabric_And_InvoiceSplitting(t *testing.T) {
 		t.Errorf("Expected QRCopiesPerBundle 3, got %d", lotDetail.Lot.QRCopiesPerBundle)
 	}
 }
+
+func TestLegacySeededFabricAttrsFallbackAndFloorAttrsPersist(t *testing.T) {
+	db, svc := setupTestDB(t)
+
+	// Insert a legacy/seeded Fabric lot whose SQL columns hold GSM/Dia/FabricType while attrs_json is '{}'
+	_, err := db.Exec(`
+		INSERT INTO master_entities (id, name, entity_type, created_at)
+		VALUES ('ent_v_legacy', 'Legacy Knit Mills', 'vendor', 1700000000)
+		ON CONFLICT(id) DO NOTHING
+	`)
+	if err != nil {
+		t.Fatalf("failed to seed vendor: %v", err)
+	}
+	_, err = db.Exec(`
+		INSERT INTO parent_inward_lots (
+			id, parent_code, inward_date, vendor_id, vendor_name, invoice_no, inward_type,
+			uom, invoice_qty, invoice_amount, physical_received_qty,
+			fabric_type, vendor_fab_name, fpcc_fab_name, vendor_color, fpcc_color,
+			invoice_gsm, dia, stage, unit_rate, vendor_product, fpcc_product, no_of_bundles, attrs_json, fabric_products_json, created_at
+		) VALUES (
+			'plt_261199-Z', '261199-Z', '2026-11-17', 'ent_v_legacy', 'Legacy Knit Mills', 'INV-LEG-01', 'Fabric',
+			'Kgs', 250.0, 87500.0, 0.0,
+			'Knitted', '2441 Galactic Polo', '2441 Galactic Polo', 'Navy', 'Navy',
+			220.0, 32.0, 'AWAITING_COUNT', 350.0, '2441 Galactic Polo', '2441 Galactic Polo', 1, '{}', '[]', 1700000000
+		)
+	`)
+	if err != nil {
+		t.Fatalf("failed to seed legacy lot: %v", err)
+	}
+	_, err = db.Exec(`
+		INSERT INTO bundles (
+			id, bundle_code, parent_lot_id, parent_code, bundle_sequence, total_bundles,
+			item_type, item_name, color_name, invoiced_qty, inward_weight_qty, available_qty,
+			measured_gsm, measured_dia, size_spec, location_bin, qc_status, qr_payload, created_at
+		) VALUES (
+			'bnd_261199_z_1', '261199-Z-1/1', 'plt_261199-Z', '261199-Z', 1, 1,
+			'Fabric', '2441 Galactic Polo', 'Navy', 250.0, 250.0, 250.0,
+			220.0, 32.0, 'Knitted (Dia: 32", 220 GSM)', 'A/R01/S01', 'Pending', '{}', 1700000000
+		)
+	`)
+	if err != nil {
+		t.Fatalf("failed to seed legacy bundle: %v", err)
+	}
+
+	// Verify GetLot backfills GSM/Dia/FabricType into Attrs and FabricProducts
+	seededDetail, err := svc.GetLot("261199-Z")
+	if err != nil {
+		t.Fatalf("GetLot 261199-Z failed: %v", err)
+	}
+	if seededDetail.Lot.Attrs["fabricType"] != "Knitted" {
+		t.Errorf("Expected backfilled fabricType 'Knitted', got %v", seededDetail.Lot.Attrs["fabricType"])
+	}
+	if seededDetail.Lot.Attrs["invoiceGsm"] != 220.0 {
+		t.Errorf("Expected backfilled invoiceGsm 220, got %v", seededDetail.Lot.Attrs["invoiceGsm"])
+	}
+	if seededDetail.Lot.Attrs["dia"] != 32.0 {
+		t.Errorf("Expected backfilled dia 32, got %v", seededDetail.Lot.Attrs["dia"])
+	}
+	if len(seededDetail.Lot.FabricProducts) != 1 || seededDetail.Lot.FabricProducts[0].GSM != 220.0 {
+		t.Errorf("Expected synthesized FabricProducts[0] GSM 220, got %+v", seededDetail.Lot.FabricProducts)
+	}
+
+	// Verify ListLots also returns backfilled Attrs for 261199-Z
+	lots, err := svc.ListLots("ALL")
+	if err != nil {
+		t.Fatalf("ListLots failed: %v", err)
+	}
+	found := false
+	for _, l := range lots {
+		if l.ParentCode == "261199-Z" {
+			found = true
+			if l.Attrs["invoiceGsm"] != 220.0 || l.Attrs["dia"] != 32.0 {
+				t.Errorf("Expected ListLots 261199-Z attrs to contain GSM=220 & Dia=32, got %+v", l.Attrs)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("Expected 261199-Z in ListLots result")
+	}
+
+	// Verify Station 1B floor count persists updated Step 2 Attrs onto parent_inward_lots
+	_, err = svc.RecordFloorCount(inventory.FloorCountPayload{
+		ParentCode:  "261199-Z",
+		InvoicedQty: 250.0,
+		CountedQty:  250.0,
+		LocationBin: "A/R01/S01",
+		CountedBy:   "Tester",
+		Attrs: map[string]any{
+			"composition": "100%Cot",
+			"fabricType":  "Pique",
+		},
+		Bundles: []inventory.FloorCountBundle{
+			{
+				BundleCode:  "261199-Z-1/1",
+				Sequence:    1,
+				InvoicedQty: 250.0,
+				CountedQty:  250.0,
+				LocationBin: "A/R01/S01",
+				MeasuredGsm: 222,
+				MeasuredDia: 32,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("RecordFloorCount with Attrs failed: %v", err)
+	}
+
+	updatedDetail, err := svc.GetLot("261199-Z")
+	if err != nil {
+		t.Fatalf("GetLot post-floor failed: %v", err)
+	}
+	if updatedDetail.Lot.Attrs["composition"] != "100%Cot" || updatedDetail.Lot.Attrs["fabricType"] != "Pique" {
+		t.Errorf("Expected persisted Step 2 attrs, got %+v", updatedDetail.Lot.Attrs)
+	}
+}

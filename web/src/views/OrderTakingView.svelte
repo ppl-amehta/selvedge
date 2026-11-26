@@ -33,7 +33,7 @@
   let overallClientComment = $state('');
 
   // 2. Multi-Product Line Items
-  let items = $state([createInitialProductItem()]);
+  let items = $state(/** @type {any[]} */ ([createInitialProductItem()]));
 
   // 3. Multi-Shipping Destinations
   let isMultiShipping = $state(false);
@@ -340,7 +340,7 @@
       else if (lower.includes('10.5')) items[idx].size = '10.5 Inch';
       else if (!items[idx].size) items[idx].size = getNonApparelSizes(items[idx].subCategory)[0] || 'Std';
 
-      items[idx].isLocked = (parseInt(items[idx].totalQty, 10) || 0) <= 0;
+      items[idx].isLocked = (Number(items[idx].totalQty) || 0) <= 0;
     } else {
       // Auto-suggest fabric for Apparel based on product name / genre
       if (!items[idx].fabricName) {
@@ -359,7 +359,7 @@
       items[idx].subCategory = 'Drinkwear';
       items[idx].size = '500ml';
       items[idx].fabricName = '';
-      items[idx].isLocked = (parseInt(items[idx].totalQty, 10) || 0) <= 0;
+      items[idx].isLocked = (Number(items[idx].totalQty) || 0) <= 0;
     } else {
       items[idx].subCategory = 'Polo';
       items[idx].size = '';
@@ -416,7 +416,7 @@
 
   function removeProductItem(idx) {
     if (items.length <= 1) {
-      if (window.showToast) window.showToast('Order must contain at least one product item', 'warn');
+      if (window.showToast) window.showToast('Order must contain at least one product item', 'warning');
       return;
     }
     items = items.filter((_, i) => i !== idx);
@@ -551,20 +551,20 @@
 
   // Overall Aggregates & Math Lock Verification
   let grandTotalUnits = $derived.by(() => {
-    return items.reduce((sum, item) => sum + (parseInt(item.totalQty, 10) || 0), 0);
+    return items.reduce((sum, item) => sum + (Number(item.totalQty) || 0), 0);
   });
 
   let grandTaxableSubtotal = $derived.by(() => {
     return items.reduce((sum, item) => {
-      const q = parseInt(item.totalQty, 10) || 0;
-      const p = parseFloat(item.unitPrice) || 0.0;
+      const q = Number(item.totalQty) || 0;
+      const p = Number(item.unitPrice) || 0.0;
       return sum + (q * p);
     }, 0);
   });
 
   let grandOrderValuation = $derived.by(() => {
     const sub = grandTaxableSubtotal;
-    const rate = parseFloat(taxRate) || 0.0;
+    const rate = Number(taxRate) || 0.0;
     if (taxBilling === 'Extra') {
       return sub + (sub * (rate / 100.0));
     }
@@ -576,7 +576,7 @@
   let lockedItemInfo = $derived.by(() => {
     for (let i = 0; i < items.length; i++) {
       const it = items[i];
-      const qty = parseInt(it.totalQty, 10) || 0;
+      const qty = Number(it.totalQty) || 0;
       if (qty <= 0) {
         return { isLocked: true, index: i + 1, productName: it.productName || 'Item #' + (i + 1), reason: 'Quantity must be greater than 0' };
       }
@@ -628,7 +628,7 @@
         gstin,
         billingAddress,
         shippingAddress: billingAddress,
-        taxRate: parseFloat(taxRate) || 0.0,
+        taxRate: Number(taxRate) || 0.0,
         taxBilling,
         freightMode,
         freightCost,
@@ -644,7 +644,7 @@
             : (it.otherLabel || '');
 
           const computedMatrix = isNonApp
-            ? { General: { [it.size || 'Std']: parseInt(it.totalQty, 10) || 0 } }
+            ? { General: { [it.size || 'Std']: Number(it.totalQty) || 0 } }
             : it.matrix;
 
           return {
@@ -657,8 +657,8 @@
             fabricName: isNonApp ? '' : it.fabricName,
             fabricComposition: isNonApp ? '' : (it.fabricComposition || ''),
             size: it.size || '',
-            unitPrice: parseFloat(it.unitPrice) || 0.0,
-            totalQty: parseInt(it.totalQty, 10) || 0,
+            unitPrice: Number(it.unitPrice) || 0.0,
+            totalQty: Number(it.totalQty) || 0,
             clientEtd: it.clientEtd,
             clientRemarks: it.clientRemarks,
             productImageUrl: it.productImageUrl,
@@ -1013,9 +1013,9 @@
                       class="select-control"
                       style="width:auto;font-size:12px;padding:4px 10px;height:auto;"
                       onchange={(e) => {
-                        if (e.target.value !== '') {
-                          copyPropertiesFromItem(idx, parseInt(e.target.value, 10));
-                          e.target.value = '';
+                        if (e.currentTarget.value !== '') {
+                          copyPropertiesFromItem(idx, parseInt(e.currentTarget.value, 10));
+                          e.currentTarget.value = '';
                         }
                       }}
                     >
@@ -1041,7 +1041,7 @@
                       id="item-cat-{item.id}"
                       class="select-control"
                       value={item.category}
-                      onchange={(e) => onCategoryChange(idx, e.target.value)}
+                      onchange={(e) => onCategoryChange(idx, e.currentTarget.value)}
                     >
                       <option value="Apparel">Apparel</option>
                       <option value="Non Apparel">Non Apparel</option>
@@ -1154,7 +1154,7 @@
                       bind:value={item.totalQty}
                       oninput={() => {
                         if (item.category === 'Non Apparel') {
-                          item.isLocked = (parseInt(item.totalQty, 10) || 0) <= 0;
+                          item.isLocked = (Number(item.totalQty) || 0) <= 0;
                         }
                       }}
                     />
@@ -1225,7 +1225,7 @@
                           placeholder="Enter piece count..."
                           bind:value={item.totalQty}
                           oninput={() => {
-                            item.isLocked = (parseInt(item.totalQty, 10) || 0) <= 0;
+                            item.isLocked = (Number(item.totalQty) || 0) <= 0;
                           }}
                         />
                       </div>
@@ -1762,16 +1762,6 @@
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
     gap: 12px;
-  }
-
-  .trims-packaging-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 12px;
-    background: var(--bg-input);
-    padding: 14px;
-    border-radius: var(--radius-md);
-    border: 1px solid var(--border-subtle);
   }
 
   /* Commercial Footer Bar */

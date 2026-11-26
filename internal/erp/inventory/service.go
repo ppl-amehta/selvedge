@@ -143,6 +143,7 @@ type FloorCountPayload struct {
 	CountedBy   string             `json:"countedBy"`
 	Comments    string             `json:"comments"`
 	HoldOnShort bool               `json:"holdOnShort"`
+	Attrs       map[string]any     `json:"attrs,omitempty"`
 	SizeLines   []map[string]any   `json:"sizeLines,omitempty"`
 	Bundles     []FloorCountBundle `json:"bundles"`
 }
@@ -901,12 +902,14 @@ func (s *Service) RecordFloorCount(p FloorCountPayload) (FloorCountResult, error
 
 	// 1. Fetch current lot with stage check
 	var lotID, vendorName, invoiceNo, inwardType, uom string
-	var currentStage string
-	var unitRate, billedInvoiceQty float64
+	var currentStage, rawLotAttrs, curFabricType string
+	var unitRate, billedInvoiceQty, curInvoiceGsm, curDia float64
 	err = tx.QueryRow(`
-		SELECT id, vendor_name, invoice_no, inward_type, uom, stage, unit_rate, invoice_qty
+		SELECT id, vendor_name, invoice_no, inward_type, uom, stage, unit_rate, invoice_qty,
+		       COALESCE(attrs_json, '{}'), COALESCE(fabric_type, ''), COALESCE(invoice_gsm, 0), COALESCE(dia, 0)
 		FROM parent_inward_lots WHERE parent_code = ?
-	`, parentCode).Scan(&lotID, &vendorName, &invoiceNo, &inwardType, &uom, &currentStage, &unitRate, &billedInvoiceQty)
+	`, parentCode).Scan(&lotID, &vendorName, &invoiceNo, &inwardType, &uom, &currentStage, &unitRate, &billedInvoiceQty,
+		&rawLotAttrs, &curFabricType, &curInvoiceGsm, &curDia)
 	if err == sql.ErrNoRows {
 		return FloorCountResult{}, fmt.Errorf("lot %s not found", parentCode)
 	} else if err != nil {
@@ -978,14 +981,47 @@ func (s *Service) RecordFloorCount(p FloorCountPayload) (FloorCountResult, error
 		return FloorCountResult{}, fmt.Errorf("failed to insert floor count reconciliation: %w", err)
 	}
 
+	// Merge Step 2 measured/verified attributes if provided
+	mergedAttrsJSON := rawLotAttrs
+	if strings.TrimSpace(mergedAttrsJSON) == "" {
+		mergedAttrsJSON = "{}"
+	}
+	if len(p.Attrs) > 0 {
+		lotAttrs := make(map[string]any)
+		_ = json.Unmarshal([]byte(rawLotAttrs), &lotAttrs)
+		for k, v := range p.Attrs {
+			lotAttrs[k] = v
+		}
+		if raw, mErr := json.Marshal(lotAttrs); mErr == nil {
+			mergedAttrsJSON = string(raw)
+		}
+		if strings.EqualFold(inwardType, "Fabric") {
+			if ft, ok := p.Attrs["fabricType"].(string); ok && strings.TrimSpace(ft) != "" {
+				curFabricType = strings.TrimSpace(ft)
+			}
+			if gsmVal, ok := p.Attrs["invoiceGsm"]; ok {
+				if f := asFloat64(gsmVal); f > 0 {
+					curInvoiceGsm = f
+				}
+			}
+			if diaVal, ok := p.Attrs["dia"]; ok {
+				if f := asFloat64(diaVal); f > 0 {
+					curDia = f
+				}
+			}
+		}
+	}
+
 	// 5. Atomic CAS Update on Parent Inward Lot
 	res, err := tx.Exec(`
 		UPDATE parent_inward_lots
 		SET stage = ?, invoice_qty = ?, counted_qty = ?, variance_qty = ?, variance_pct = ?,
-		    physical_received_qty = ?, shortfall_qty = ?, discrepancy_amount = ?
+		    physical_received_qty = ?, shortfall_qty = ?, discrepancy_amount = ?,
+		    attrs_json = ?, fabric_type = ?, invoice_gsm = ?, dia = ?
 		WHERE parent_code = ? AND stage IN (?, ?)
 	`, string(nextStage), invoicedQty, countedTotal, varianceQty, variancePct,
-		countedTotal, (invoicedQty - countedTotal), financialImpact, parentCode,
+		countedTotal, (invoicedQty - countedTotal), financialImpact,
+		mergedAttrsJSON, curFabricType, curInvoiceGsm, curDia, parentCode,
 		string(StageAwaitingCount), string(StageDiscrepancyHold),
 	)
 	if err != nil {
@@ -1494,6 +1530,99 @@ func (s *Service) GetInvoice(invoiceNo string) (*InwardInvoice, error) {
 // LISTING & DETAIL QUERIES
 // -------------------------------------------------------------
 
+func asFloat64(v any) float64 {
+	switch val := v.(type) {
+	case float64:
+		return val
+	case int:
+		return float64(val)
+	case string:
+		var parsed float64
+		cleaned := strings.ReplaceAll(strings.TrimSpace(val), `"`, "")
+		_, _ = fmt.Sscanf(cleaned, "%f", &parsed)
+		return parsed
+	default:
+		return 0
+	}
+}
+
+func attrMissing(attrs map[string]any, key string) bool {
+	v, ok := attrs[key]
+	if !ok || v == nil {
+		return true
+	}
+	if s, ok := v.(string); ok {
+		return strings.TrimSpace(s) == ""
+	}
+	if f, ok := v.(float64); ok {
+		return f == 0
+	}
+	return false
+}
+
+// mergeLotColumnFallback backfills Attrs and FabricProducts from top-level SQL columns
+// so seeded or legacy lots never lose GSM, Dia, Fabric Type, or Rate in UI stations.
+func mergeLotColumnFallback(item *LotSummary, fabricType string, invoiceGsm, dia, unitRate float64, vendorFabName, fpccFabName string) {
+	if item.Attrs == nil {
+		item.Attrs = make(map[string]any)
+	}
+	if fabricType != "" && attrMissing(item.Attrs, "fabricType") {
+		item.Attrs["fabricType"] = fabricType
+	}
+	if invoiceGsm > 0 && attrMissing(item.Attrs, "invoiceGsm") {
+		item.Attrs["invoiceGsm"] = invoiceGsm
+	}
+	if dia > 0 && attrMissing(item.Attrs, "dia") {
+		item.Attrs["dia"] = dia
+	}
+	if unitRate > 0 && attrMissing(item.Attrs, "rate") {
+		item.Attrs["rate"] = unitRate
+	}
+	if vendorFabName != "" && attrMissing(item.Attrs, "vendorFabName") {
+		item.Attrs["vendorFabName"] = vendorFabName
+	}
+	if fpccFabName != "" && attrMissing(item.Attrs, "fpccFabName") {
+		item.Attrs["fpccFabName"] = fpccFabName
+	}
+
+	if strings.EqualFold(strings.TrimSpace(item.InwardType), "Fabric") && len(item.FabricProducts) == 0 {
+		comp, _ := item.Attrs["composition"].(string)
+		diaStr := ""
+		if dia > 0 {
+			diaStr = fmt.Sprintf("%.0f\"", dia)
+		}
+		fpName := fpccFabName
+		if fpName == "" {
+			fpName = item.FpccProduct
+		}
+		vpName := vendorFabName
+		if vpName == "" {
+			vpName = item.VendorProduct
+		}
+		if fabricType != "" || invoiceGsm > 0 || dia > 0 || fpName != "" || vpName != "" {
+			rolls := item.NoOfBundles
+			if rolls <= 0 {
+				rolls = 1
+			}
+			item.FabricProducts = []FabricProductItem{
+				{
+					ID:            "fp_1",
+					FabricType:    fabricType,
+					FpccProduct:   fpName,
+					VendorProduct: vpName,
+					Color:         item.FpccColor,
+					UOM:           item.UOM,
+					Dia:           diaStr,
+					GSM:           invoiceGsm,
+					Composition:   comp,
+					Rate:          unitRate,
+					RollCount:     rolls,
+				},
+			}
+		}
+	}
+}
+
 func (s *Service) ListLots(stageFilter string) ([]LotSummary, error) {
 	query := `
 		SELECT 
@@ -1508,6 +1637,8 @@ func (s *Service) ListLots(stageFilter string) ([]LotSummary, error) {
 			(SELECT COUNT(*) FROM bundles b WHERE b.parent_code = p.parent_code AND b.qc_status = 'Rejected') AS rejected_count,
 			COALESCE(p.remarks, ''), COALESCE(p.attrs_json, '{}'),
 			COALESCE(p.invoice_id, ''), COALESCE(p.fabric_products_json, '[]'), COALESCE(p.qr_copies_per_bundle, 3),
+			COALESCE(p.fabric_type, ''), COALESCE(p.invoice_gsm, 0), COALESCE(p.dia, 0),
+			COALESCE(p.unit_rate, 0), COALESCE(p.vendor_fab_name, ''), COALESCE(p.fpcc_fab_name, ''),
 			p.created_at
 		FROM parent_inward_lots p
 	`
@@ -1528,7 +1659,8 @@ func (s *Service) ListLots(stageFilter string) ([]LotSummary, error) {
 	var results []LotSummary
 	for rows.Next() {
 		var item LotSummary
-		var rawAttrs, rawFabProds string
+		var rawAttrs, rawFabProds, fabricType, vendorFabName, fpccFabName string
+		var invoiceGsm, dia, unitRate float64
 		err := rows.Scan(
 			&item.ID, &item.ParentCode, &item.InwardDate, &item.InwardType, &item.VendorName, &item.InvoiceNo,
 			&item.InvoiceQty, &item.InvoiceAmount, &item.CountedQty, &item.VarianceQty, &item.VariancePct,
@@ -1538,6 +1670,7 @@ func (s *Service) ListLots(stageFilter string) ([]LotSummary, error) {
 			&item.InspectedBundles, &item.PassedBundles, &item.RejectedBundles,
 			&item.Remarks, &rawAttrs,
 			&item.InvoiceID, &rawFabProds, &item.QRCopiesPerBundle,
+			&fabricType, &invoiceGsm, &dia, &unitRate, &vendorFabName, &fpccFabName,
 			&item.CreatedAt,
 		)
 		if err != nil {
@@ -1551,6 +1684,7 @@ func (s *Service) ListLots(stageFilter string) ([]LotSummary, error) {
 		if rawFabProds != "" {
 			_ = json.Unmarshal([]byte(rawFabProds), &item.FabricProducts)
 		}
+		mergeLotColumnFallback(&item, fabricType, invoiceGsm, dia, unitRate, vendorFabName, fpccFabName)
 		results = append(results, item)
 	}
 	if err := rows.Err(); err != nil {
@@ -1568,7 +1702,8 @@ func (s *Service) GetLot(parentCode string) (LotDetail, error) {
 
 	// 1. Fetch Lot Summary
 	var item LotSummary
-	var rawAttrs, rawFabProds string
+	var rawAttrs, rawFabProds, fabricType, vendorFabName, fpccFabName string
+	var invoiceGsm, dia, unitRate float64
 	err := s.db.QueryRow(`
 		SELECT 
 			p.id, p.parent_code, p.inward_date, p.inward_type, p.vendor_name, p.invoice_no,
@@ -1582,6 +1717,8 @@ func (s *Service) GetLot(parentCode string) (LotDetail, error) {
 			(SELECT COUNT(*) FROM bundles b WHERE b.parent_code = p.parent_code AND b.qc_status = 'Rejected'),
 			COALESCE(p.remarks, ''), COALESCE(p.attrs_json, '{}'),
 			COALESCE(p.invoice_id, ''), COALESCE(p.fabric_products_json, '[]'), COALESCE(p.qr_copies_per_bundle, 3),
+			COALESCE(p.fabric_type, ''), COALESCE(p.invoice_gsm, 0), COALESCE(p.dia, 0),
+			COALESCE(p.unit_rate, 0), COALESCE(p.vendor_fab_name, ''), COALESCE(p.fpcc_fab_name, ''),
 			p.created_at
 		FROM parent_inward_lots p
 		WHERE p.parent_code = ?
@@ -1594,6 +1731,7 @@ func (s *Service) GetLot(parentCode string) (LotDetail, error) {
 		&item.InspectedBundles, &item.PassedBundles, &item.RejectedBundles,
 		&item.Remarks, &rawAttrs,
 		&item.InvoiceID, &rawFabProds, &item.QRCopiesPerBundle,
+		&fabricType, &invoiceGsm, &dia, &unitRate, &vendorFabName, &fpccFabName,
 		&item.CreatedAt,
 	)
 	if err == sql.ErrNoRows {
@@ -1609,6 +1747,7 @@ func (s *Service) GetLot(parentCode string) (LotDetail, error) {
 	if rawFabProds != "" {
 		_ = json.Unmarshal([]byte(rawFabProds), &item.FabricProducts)
 	}
+	mergeLotColumnFallback(&item, fabricType, invoiceGsm, dia, unitRate, vendorFabName, fpccFabName)
 
 	// 2. Fetch Bundles
 	bundleRows, err := s.db.Query(`

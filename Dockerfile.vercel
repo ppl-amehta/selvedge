@@ -1,0 +1,56 @@
+# ========================================================
+# FPCC SELVEDGE VERCEL CONTAINER RUNTIME
+# Builds Svelte 5 + Go 1.27 + CGO SQLite/LibSQL Static Binary
+# Stateful storage externalized to Turso Cloud + Vercel Blob
+# ========================================================
+
+FROM --platform=$BUILDPLATFORM node:24-alpine AS web-builder
+
+WORKDIR /build/web
+
+COPY web/package*.json ./
+RUN npm ci --no-audit --prefer-offline
+
+COPY web/ ./
+RUN npm run build
+
+FROM golang:alpine AS go-builder
+
+RUN apk add --no-cache musl-dev gcc git ca-certificates tzdata
+
+WORKDIR /build
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+COPY --from=web-builder /build/web/dist ./web/dist
+
+RUN CGO_ENABLED=1 GOOS=linux \
+    go build -tags "netgo,osusergo" \
+    -ldflags="-s -w -extldflags '-static'" \
+    -o /bin/selvedge ./cmd/selvedge
+
+RUN ldd /bin/selvedge 2>&1 | grep -iE "not a (dynamic executable|valid dynamic program)"
+
+FROM alpine:3.21
+
+RUN apk add --no-cache ca-certificates tzdata \
+    && rm -rf /var/cache/apk/*
+
+RUN addgroup -g 10001 -S appgroup \
+    && adduser -u 10001 -S appuser -G appgroup
+
+COPY --from=go-builder --chown=appuser:appgroup /bin/selvedge /usr/local/bin/selvedge
+
+ENV PORT=80 \
+    VERCEL=1 \
+    LOG_FORMAT=json \
+    TZ=UTC
+
+USER appuser
+WORKDIR /home/appuser
+
+EXPOSE 80
+
+ENTRYPOINT ["/usr/local/bin/selvedge"]

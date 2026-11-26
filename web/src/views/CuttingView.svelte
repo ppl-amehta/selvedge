@@ -25,7 +25,7 @@
 
   // Remnant Form State
   let remnantRollCode = $state('');
-  let remnantType = $state('BIT'); // 'BIT' | 'REJ'
+  let remnantType = $state('Bit'); // 'Bit' | 'Rej'
   let remnantWeightKg = $state('');
   let remnantLocation = $state('RACK-CUT-01');
   let remnantReason = $state('');
@@ -34,9 +34,9 @@
   let totalPiecesInLay = $derived(() => {
     let sumRatio = 0;
     for (const sz in ratio) {
-      sumRatio += (parseInt(ratio[sz], 10) || 0);
+      sumRatio += (Number(ratio[sz]) || 0);
     }
-    return sumRatio * (parseInt(plies, 10) || 0);
+    return sumRatio * (Number(plies) || 0);
   });
 
   let efficiencyEstimate = $derived(() => {
@@ -69,7 +69,23 @@
     selectedOrderId = id;
     isLoading = true;
     try {
-      activeJob = await api.getCuttingJob(id);
+      const raw = await api.getCuttingJob(id);
+      const job = raw?.job || {};
+      const hdr = raw?.orderHeader || {};
+      activeJob = {
+        ...raw,
+        id: job.id || id,
+        clientName: hdr.clientName || raw?.clientName || '',
+        productionOrderNo: job.productionOrderNo || raw?.productionOrderNo || '',
+        productName: job.productName || raw?.productName || '',
+        colorName: job.colorName || raw?.colorName || '',
+        fabricName: job.fabricName || raw?.fabricName || '',
+        targetQty: raw?.totalTargetQty ?? job.targetQty ?? 0,
+        pharmaNo: job.pharmaNo || raw?.pharmaNo || '',
+        sizesProgress: raw?.sizeProgressList || raw?.sizesProgress || [],
+        cutLays: raw?.lays || raw?.cutLays || [],
+        cutBundles: raw?.bundles || raw?.cutBundles || []
+      };
       // Pre-fill ratio keys from active job sizes
       if (activeJob?.sizesProgress) {
         const initialRatio = {};
@@ -78,10 +94,13 @@
         });
         ratio = initialRatio;
       }
-      if (activeJob?.issuedRolls?.length > 0 && !rollCode) {
+      if (activeJob?.issuedRolls?.length > 0 && (!rollCode || !activeJob.issuedRolls.some(r => r.rollCode === rollCode))) {
         rollCode = activeJob.issuedRolls[0].rollCode;
+      } else if (!activeJob?.issuedRolls?.length) {
+        rollCode = '';
       }
     } catch (err) {
+      activeJob = null;
       if (window.showToast) window.showToast('Failed to load cutting job: ' + err.message, 'error');
     } finally {
       isLoading = false;
@@ -102,21 +121,24 @@
     }
 
     try {
+      const selectedRoll = (activeJob?.issuedRolls || []).find(r => r.rollCode === rollCode.trim());
       const payload = {
-        cuttingJobId: selectedOrderId,
+        cuttingJobId: activeJob?.id || selectedOrderId,
         rollCode: rollCode.trim(),
+        fabricName: selectedRoll?.fabricName || activeJob?.fabricName || '',
+        rollWeightKg: Number(selectedRoll?.rollWeightKg ?? selectedRoll?.issuedWeightKg) || 0,
         markerName: markerName.trim(),
         ratio: ratio,
-        plies: parseInt(plies, 10),
+        plies: Number(plies) || 1,
         layWeightKg: parseFloat(layWeightKg) || 0,
         operatorName: operatorName.trim()
       };
       const res = await api.recordCutLay(payload);
       if (window.showToast) {
-        window.showToast(`✓ Cut Lay recorded! Generated ${res?.bundles?.length || 0} bundle(s)`, 'success');
+        window.showToast(`✓ Cut Lay #${res?.layNumber || ''} recorded (${res?.totalPiecesInLay || pcs} pcs)!`, 'success');
       }
-      // Reload job data
-      await selectOrder(selectedOrderId);
+      // Reload job data & orders summary counters
+      await Promise.all([selectOrder(selectedOrderId), loadOrders()]);
       activeTab = 'bundles';
     } catch (err) {
       if (window.showToast) window.showToast('Failed to record cut lay: ' + err.message, 'error');
@@ -129,17 +151,17 @@
 
     try {
       const payload = {
-        cuttingJobId: selectedOrderId,
-        originalRollCode: remnantRollCode.trim(),
+        cuttingJobId: activeJob?.id || selectedOrderId,
+        sourceRollCode: remnantRollCode.trim(),
         prefix: remnantType,
         weightKg: parseFloat(remnantWeightKg),
-        rackLocation: remnantLocation.trim(),
+        binLocation: remnantLocation.trim(),
         defectReason: remnantReason.trim(),
         operatorName: operatorName.trim()
       };
       const res = await api.recordCuttingRemnant(payload);
       if (window.showToast) {
-        window.showToast(`✓ Remnant recorded! New Code: ${res?.remnantCode || 'Stored'}`, 'success');
+        window.showToast(`✓ Remnant recorded! New Code: ${res?.id || 'Stored'}`, 'success');
       }
       remnantWeightKg = '';
       remnantReason = '';
@@ -259,9 +281,10 @@
           <form onsubmit={handleRecordLay}>
             <div class="form-row">
               <div class="form-group flex-1">
-                <label>Fabric Roll Code <span class="req">*</span></label>
+                <label for="cut-roll-code">Fabric Roll Code <span class="req">*</span></label>
                 <div class="input-with-button">
                   <input
+                    id="cut-roll-code"
                     type="text"
                     class="form-control"
                     placeholder="Scan or enter Roll QR..."
@@ -271,11 +294,12 @@
                   {#if activeJob?.issuedRolls?.length > 0}
                     <select
                       class="form-control select-compact"
-                      onchange={(e) => rollCode = e.target.value}
+                      aria-label="Pick Issued Roll"
+                      onchange={(e) => rollCode = e.currentTarget.value}
                     >
                       <option value="">-- Pick Issued Roll --</option>
                       {#each activeJob.issuedRolls as r}
-                        <option value={r.rollCode}>{r.rollCode} ({r.rollWeightKg} kg)</option>
+                        <option value={r.rollCode}>{r.rollCode} ({r.rollWeightKg ?? r.issuedWeightKg ?? 0} kg)</option>
                       {/each}
                     </select>
                   {/if}
@@ -283,8 +307,9 @@
               </div>
 
               <div class="form-group flex-1">
-                <label>Marker Identifier</label>
+                <label for="cut-marker-id">Marker Identifier</label>
                 <input
+                  id="cut-marker-id"
                   type="text"
                   class="form-control"
                   placeholder="e.g. Marker-M-L-2"
@@ -295,11 +320,11 @@
 
             <!-- Plies Counter with Big Touch Increments -->
             <div class="form-group">
-              <label>Number of Plies (Layers) <span class="req">*</span></label>
+              <label for="cut-plies">Number of Plies (Layers) <span class="req">*</span></label>
               <div class="plies-control">
                 <button type="button" class="btn btn-touch" onclick={() => plies = Math.max(1, plies - 5)}>-5</button>
                 <button type="button" class="btn btn-touch" onclick={() => plies = Math.max(1, plies - 1)}>-1</button>
-                <input type="number" class="form-control plies-input" min="1" bind:value={plies} required />
+                <input id="cut-plies" type="number" class="form-control plies-input" min="1" bind:value={plies} required />
                 <button type="button" class="btn btn-touch" onclick={() => plies = plies + 1}>+1</button>
                 <button type="button" class="btn btn-touch" onclick={() => plies = plies + 5}>+5</button>
                 <button type="button" class="btn btn-touch" onclick={() => plies = plies + 10}>+10</button>
@@ -308,7 +333,7 @@
 
             <!-- Size Ratio Grid -->
             <div class="form-group">
-              <label>Marker Size Ratio (Pieces per Ply) <span class="req">*</span></label>
+              <span class="field-label">Marker Size Ratio (Pieces per Ply) <span class="req">*</span></span>
               <div class="ratio-matrix">
                 {#if activeJob?.sizesProgress}
                   {#each activeJob.sizesProgress as sp}
@@ -317,6 +342,7 @@
                       <input
                         type="number"
                         min="0"
+                        aria-label="Ratio for size {sp.size}"
                         class="form-control ratio-input"
                         bind:value={ratio[sp.size]}
                         placeholder="0"
@@ -330,8 +356,9 @@
 
             <div class="form-row">
               <div class="form-group flex-1">
-                <label>Lay Fabric Weight (Kg)</label>
+                <label for="cut-lay-weight">Lay Fabric Weight (Kg)</label>
                 <input
+                  id="cut-lay-weight"
                   type="number"
                   step="0.01"
                   class="form-control"
@@ -340,8 +367,9 @@
                 />
               </div>
               <div class="form-group flex-1">
-                <label>Floor Operator Name</label>
+                <label for="cut-operator">Floor Operator Name</label>
                 <input
+                  id="cut-operator"
                   type="text"
                   class="form-control"
                   bind:value={operatorName}
@@ -475,8 +503,9 @@
 
           <form onsubmit={handleRecordRemnant}>
             <div class="form-group">
-              <label>Original Roll Code <span class="req">*</span></label>
+              <label for="cut-rem-roll-code">Original Roll Code <span class="req">*</span></label>
               <input
+                id="cut-rem-roll-code"
                 type="text"
                 class="form-control"
                 placeholder="e.g. 261019-A-1/4"
@@ -487,16 +516,17 @@
 
             <div class="form-row">
               <div class="form-group flex-1">
-                <label>Classification</label>
-                <select class="form-control" bind:value={remnantType}>
-                  <option value="BIT">Bit / Usable Remnant (Prefix: Bit)</option>
-                  <option value="REJ">Reject / Defect Roll (Prefix: Rej)</option>
+                <label for="cut-rem-type">Classification</label>
+                <select id="cut-rem-type" class="form-control" bind:value={remnantType}>
+                  <option value="Bit">Bit / Usable Remnant (Prefix: Bit)</option>
+                  <option value="Rej">Reject / Defect Roll (Prefix: Rej)</option>
                 </select>
               </div>
 
               <div class="form-group flex-1">
-                <label>Returned Weight (Kg) <span class="req">*</span></label>
+                <label for="cut-rem-weight">Returned Weight (Kg) <span class="req">*</span></label>
                 <input
+                  id="cut-rem-weight"
                   type="number"
                   step="0.01"
                   class="form-control"
@@ -508,8 +538,9 @@
             </div>
 
             <div class="form-group">
-              <label>Bin / Rack Location</label>
+              <label for="cut-rem-location">Bin / Rack Location</label>
               <input
+                id="cut-rem-location"
                 type="text"
                 class="form-control"
                 placeholder="e.g. RACK-CUT-01"
@@ -518,8 +549,9 @@
             </div>
 
             <div class="form-group">
-              <label>Remarks or Defect Reason</label>
+              <label for="cut-rem-reason">Remarks or Defect Reason</label>
               <input
+                id="cut-rem-reason"
                 type="text"
                 class="form-control"
                 placeholder="Optional explanation..."
@@ -541,8 +573,8 @@
                 <div class="remnant-item">
                   <span class="remnant-prefix prefix-{rem.prefix?.toLowerCase()}">{rem.prefix}</span>
                   <div class="remnant-details">
-                    <div>Original: <strong>{rem.originalRollCode}</strong></div>
-                    <div>Weight: <strong>{rem.weightKg} kg</strong> • Location: <strong>{rem.rackLocation}</strong></div>
+                    <div>Original: <strong>{rem.sourceRollCode || rem.originalRollCode}</strong></div>
+                    <div>Weight: <strong>{rem.weightKg} kg</strong> • Location: <strong>{rem.binLocation || rem.rackLocation}</strong></div>
                   </div>
                 </div>
               {/each}
@@ -837,7 +869,7 @@
     margin-bottom: 14px;
   }
 
-  .form-group label {
+  .form-group label, .form-group .field-label {
     font-size: 12px;
     font-weight: 600;
   }

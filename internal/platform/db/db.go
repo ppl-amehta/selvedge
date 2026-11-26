@@ -82,6 +82,32 @@ func Connect(dbPath string) (*DB, error) {
 	return &DB{DB: db, Engine: engineName, IsSQLite: isSQLite}, nil
 }
 
+// ListAppliedMigrations returns all already-applied migration keys in one query.
+func (d *DB) ListAppliedMigrations() (map[string]bool, error) {
+	_, err := d.DB.Exec(`CREATE TABLE IF NOT EXISTS schema_migrations (
+		version TEXT PRIMARY KEY,
+		applied_at INTEGER NOT NULL
+	)`)
+	if err != nil {
+		return nil, fmt.Errorf("failed to ensure schema_migrations table: %w", err)
+	}
+
+	rows, err := d.DB.Query("SELECT version FROM schema_migrations")
+	if err != nil {
+		return nil, fmt.Errorf("failed to query schema_migrations: %w", err)
+	}
+	defer rows.Close()
+
+	applied := make(map[string]bool)
+	for rows.Next() {
+		var version string
+		if err := rows.Scan(&version); err == nil {
+			applied[version] = true
+		}
+	}
+	return applied, rows.Err()
+}
+
 // RunMigrations executes SQL schema scripts in order with schema_migrations tracking
 func (d *DB) RunMigrations(migrationName string, migrationSql string) error {
 	// Ensure migration tracking table exists
@@ -112,8 +138,23 @@ func (d *DB) RunMigrations(migrationName string, migrationSql string) error {
 	}
 
 	if strings.TrimSpace(migrationSql) != "" {
-		if _, err := tx.Exec(migrationSql); err != nil {
-			return fmt.Errorf("migration statement failed in %s: %w", migrationName, err)
+		if d.IsSQLite {
+			if _, err := tx.Exec(migrationSql); err != nil {
+				return fmt.Errorf("migration statement failed in %s: %w", migrationName, err)
+			}
+		} else {
+			stmts := splitSQLStatements(migrationSql)
+			const batchSize = 40
+			for i := 0; i < len(stmts); i += batchSize {
+				end := i + batchSize
+				if end > len(stmts) {
+					end = len(stmts)
+				}
+				chunk := strings.Join(stmts[i:end], ";\n") + ";"
+				if _, err := tx.Exec(chunk); err != nil {
+					return fmt.Errorf("migration batch failed in %s (stmt %d..%d): %w", migrationName, i+1, end, err)
+				}
+			}
 		}
 	}
 
@@ -128,6 +169,101 @@ func (d *DB) RunMigrations(migrationName string, migrationSql string) error {
 
 	slog.Info("migration successfully applied", "version", canonicalKey)
 	return nil
+}
+
+// splitSQLStatements splits a multi-statement SQL script on top-level semicolons,
+// ignoring semicolons inside string literals, quoted identifiers, and comments.
+func splitSQLStatements(sqlText string) []string {
+	var stmts []string
+	var cur strings.Builder
+
+	inSingle := false
+	inDouble := false
+	inLineComment := false
+	inBlockComment := false
+
+	n := len(sqlText)
+	for i := 0; i < n; i++ {
+		ch := sqlText[i]
+
+		if inLineComment {
+			cur.WriteByte(ch)
+			if ch == '\n' {
+				inLineComment = false
+			}
+			continue
+		}
+		if inBlockComment {
+			cur.WriteByte(ch)
+			if ch == '*' && i+1 < n && sqlText[i+1] == '/' {
+				cur.WriteByte('/')
+				i++
+				inBlockComment = false
+			}
+			continue
+		}
+		if inSingle {
+			cur.WriteByte(ch)
+			if ch == '\'' {
+				if i+1 < n && sqlText[i+1] == '\'' {
+					cur.WriteByte('\'')
+					i++
+				} else {
+					inSingle = false
+				}
+			}
+			continue
+		}
+		if inDouble {
+			cur.WriteByte(ch)
+			if ch == '"' {
+				if i+1 < n && sqlText[i+1] == '"' {
+					cur.WriteByte('"')
+					i++
+				} else {
+					inDouble = false
+				}
+			}
+			continue
+		}
+
+		if ch == '-' && i+1 < n && sqlText[i+1] == '-' {
+			inLineComment = true
+			cur.WriteString("--")
+			i++
+			continue
+		}
+		if ch == '/' && i+1 < n && sqlText[i+1] == '*' {
+			inBlockComment = true
+			cur.WriteString("/*")
+			i++
+			continue
+		}
+		if ch == '\'' {
+			inSingle = true
+			cur.WriteByte(ch)
+			continue
+		}
+		if ch == '"' {
+			inDouble = true
+			cur.WriteByte(ch)
+			continue
+		}
+		if ch == ';' {
+			trimmed := strings.TrimSpace(cur.String())
+			if trimmed != "" {
+				stmts = append(stmts, trimmed)
+			}
+			cur.Reset()
+			continue
+		}
+		cur.WriteByte(ch)
+	}
+
+	if trimmed := strings.TrimSpace(cur.String()); trimmed != "" {
+		stmts = append(stmts, trimmed)
+	}
+	return stmts
 }
 
 // CheckpointWAL truncates the write-ahead log cleanly on shutdown

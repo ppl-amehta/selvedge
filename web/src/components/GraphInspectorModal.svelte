@@ -2,7 +2,8 @@
   import { api } from '../api.js';
 
   let {
-    isOpen = $bindable(false)
+    isOpen = $bindable(false),
+    nodeId = ''
   } = $props();
 
   let queryNodeId = $state('');
@@ -10,6 +11,13 @@
   let traverseResult = $state(null);
   let isLoading = $state(false);
   let errorMsg = $state('');
+
+  $effect(() => {
+    if (isOpen && nodeId && nodeId !== queryNodeId) {
+      queryNodeId = nodeId;
+      handleInspect();
+    }
+  });
 
   async function handleInspect() {
     if (!queryNodeId.trim()) return;

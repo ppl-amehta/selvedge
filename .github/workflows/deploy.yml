@@ -56,29 +56,29 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  deploy-serverless:
-    name: 🚀 GitOps Deploy to Free Serverless Tier
+  deploy-vercel:
+    name: 🚀 GitOps Deploy to Vercel Hobby (Turso + Blob)
     needs: publish-container
     runs-on: ubuntu-latest
     env:
-      FLY_TOKEN_SET: ${{ secrets.FLY_API_TOKEN != '' }}
+      VERCEL_TOKEN_SET: ${{ secrets.VERCEL_TOKEN != '' && secrets.VERCEL_ORG_ID != '' && secrets.VERCEL_PROJECT_ID != '' }}
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Setup Flyctl CLI
-        if: env.FLY_TOKEN_SET == 'true'
-        uses: superfly/flyctl-actions/setup-flyctl@master
-
-      - name: Deploy to Fly.io Machine Architecture
-        if: env.FLY_TOKEN_SET == 'true'
-        env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      - name: Deploy Production to Vercel
+        if: env.VERCEL_TOKEN_SET == 'true'
         run: |
-          flyctl deploy --remote-only --app selvedge
+          npm install -g vercel@latest
+          vercel deploy --prod --yes
 
       - name: Live Smoke Test Verification Probe
         run: |
           echo "✓ Container built and pushed to: ghcr.io/${{ github.repository }}:latest"
           echo "✓ Tag: ${{ needs.publish-container.outputs.image_tag }}"
-          echo "✓ Deployment manifests ready: fly.toml, deploy/koyeb.yaml, deploy/render.yaml, deploy/litestream.yml"
+          if [ "$VERCEL_TOKEN_SET" != "true" ]; then
+            echo "⚠ Set VERCEL_TOKEN, VERCEL_ORG_ID, and VERCEL_PROJECT_ID repo secrets to enable automated GitHub-driven Vercel deploys (or connect Git in Vercel dashboard)."
+          fi

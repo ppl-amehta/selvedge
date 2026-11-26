@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"strconv"
 	"strings"
 	"time"
 
@@ -256,6 +257,21 @@ func (s *Service) GetCuttingJob(orderItemOrJobId string) (*CuttingJobDetail, err
 		SELECT order_item_id, order_id FROM cutting_jobs WHERE id = ?
 		LIMIT 1
 	`, orderItemOrJobId, orderItemOrJobId).Scan(&orderItemID, &orderID)
+	if err != nil && strings.HasPrefix(orderItemOrJobId, "CJ-") {
+		trimmed := strings.TrimPrefix(orderItemOrJobId, "CJ-")
+		if lastDash := strings.LastIndex(trimmed, "-"); lastDash > 0 {
+			prodOrderNo := trimmed[:lastDash]
+			if seq, convErr := strconv.Atoi(trimmed[lastDash+1:]); convErr == nil {
+				err = s.db.QueryRow(`
+					SELECT oi.id, oi.order_id
+					FROM order_items oi
+					JOIN orders o ON o.id = oi.order_id
+					WHERE o.production_order_no = ? AND oi.item_sequence = ?
+					LIMIT 1
+				`, prodOrderNo, seq).Scan(&orderItemID, &orderID)
+			}
+		}
+	}
 	if err != nil {
 		// Try matching by production order no
 		err = s.db.QueryRow(`
@@ -452,7 +468,7 @@ func (s *Service) GetCuttingJob(orderItemOrJobId string) (*CuttingJobDetail, err
 			if err := rollRows.Scan(&id, &code, &fab, &col, &wt, &stat, &op, &at); err == nil {
 				detail.IssuedRolls = append(detail.IssuedRolls, map[string]any{
 					"id": id, "rollCode": code, "fabricName": fab, "colorName": col,
-					"issuedWeightKg": wt, "status": stat, "operatorName": op, "issuedAt": at,
+					"issuedWeightKg": wt, "rollWeightKg": wt, "status": stat, "operatorName": op, "issuedAt": at,
 				})
 			}
 		}
@@ -711,7 +727,11 @@ func (s *Service) RecordCutLay(p RecordLayPayload) (*CutLayRecord, error) {
 // RecordRemnant logs an end-bit or defect return to inventory
 func (s *Service) RecordRemnant(p RecordRemnantPayload) (*RemnantRecord, error) {
 	prefix := strings.TrimSpace(p.Prefix)
-	if prefix != "Bit" && prefix != "Rej" {
+	if strings.EqualFold(prefix, "Bit") {
+		prefix = "Bit"
+	} else if strings.EqualFold(prefix, "Rej") {
+		prefix = "Rej"
+	} else {
 		return nil, fmt.Errorf("prefix must be strictly 'Bit' (usable remnant) or 'Rej' (rejection)")
 	}
 
@@ -734,6 +754,14 @@ func (s *Service) RecordRemnant(p RecordRemnantPayload) (*RemnantRecord, error) 
 	}
 	defer tx.Rollback()
 
+	var jobIDArg, layIDArg any
+	if strings.TrimSpace(p.CuttingJobID) != "" {
+		jobIDArg = strings.TrimSpace(p.CuttingJobID)
+	}
+	if strings.TrimSpace(p.CutLayID) != "" {
+		layIDArg = strings.TrimSpace(p.CutLayID)
+	}
+
 	_, err = tx.Exec(`
 		INSERT INTO remnant_returns (
 			id, prefix, source_roll_code, cutting_job_id, cut_lay_id,
@@ -744,7 +772,7 @@ func (s *Service) RecordRemnant(p RecordRemnantPayload) (*RemnantRecord, error) 
 			bin_location = excluded.bin_location,
 			defect_reason = excluded.defect_reason,
 			created_at = excluded.created_at
-	`, remnantID, prefix, p.SourceRollCode, p.CuttingJobID, p.CutLayID,
+	`, remnantID, prefix, p.SourceRollCode, jobIDArg, layIDArg,
 		p.WeightKg, p.BinLocation, p.DefectReason, p.OperatorName, now)
 	if err != nil {
 		return nil, fmt.Errorf("failed to record remnant return: %w", err)

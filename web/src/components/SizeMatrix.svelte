@@ -21,8 +21,8 @@
 
   // Reactive Commercial Valuation via Svelte 5 $derived
   let calculatedTotalValue = $derived.by(() => {
-    const base = calculatedTotalQty * (parseFloat(unitPrice) || 0.0);
-    const rate = parseFloat(taxRate) || 0.0;
+    const base = calculatedTotalQty * (Number(unitPrice) || 0.0);
+    const rate = Number(taxRate) || 0.0;
     if (taxBilling === 'Extra') {
       const tax = base * (rate / 100.0);
       return base + tax;

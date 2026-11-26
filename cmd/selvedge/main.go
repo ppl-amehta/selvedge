@@ -26,6 +26,7 @@ import (
 	"github.com/ppl-amehta/selvedge/internal/graph"
 	"github.com/ppl-amehta/selvedge/internal/platform/db"
 	"github.com/ppl-amehta/selvedge/internal/platform/router"
+	"github.com/ppl-amehta/selvedge/internal/platform/storage"
 	"github.com/ppl-amehta/selvedge/internal/workflow"
 	"github.com/ppl-amehta/selvedge/migrations"
 	"github.com/ppl-amehta/selvedge/web"
@@ -41,9 +42,11 @@ func main() {
 		fmt.Sscanf(envPort, "%d", port)
 	}
 
+	isServerless := os.Getenv("VERCEL") != "" || os.Getenv("VERCEL_ENV") != ""
+
 	// 0. Initialize Modern Structured slog Handler
 	var handler slog.Handler
-	if os.Getenv("LOG_FORMAT") == "json" || os.Getenv("FLY_MACHINE_ID") != "" {
+	if os.Getenv("LOG_FORMAT") == "json" || os.Getenv("FLY_MACHINE_ID") != "" || isServerless {
 		handler = slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo})
 	} else {
 		handler = slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo})
@@ -80,13 +83,23 @@ func main() {
 	}
 	sort.Strings(migrationNames)
 
+	appliedMigrations, err := database.ListAppliedMigrations()
+	if err != nil {
+		slog.Error("failed to inspect applied database migrations", "error", err)
+		os.Exit(1)
+	}
+
 	for _, mFile := range migrationNames {
+		canonicalKey := "migrations/" + filepath.Base(mFile)
+		if appliedMigrations[canonicalKey] || appliedMigrations[filepath.Base(mFile)] {
+			continue
+		}
 		content, err := migrations.FS.ReadFile(mFile)
 		if err != nil {
 			slog.Error("embedded migration file read error", "file", mFile, "error", err)
 			os.Exit(1)
 		}
-		if err := database.RunMigrations("migrations/"+mFile, string(content)); err != nil {
+		if err := database.RunMigrations(canonicalKey, string(content)); err != nil {
 			slog.Error("database migration failed", "file", mFile, "error", err)
 			os.Exit(1)
 		}
@@ -108,49 +121,62 @@ func main() {
 	cuttingService := cutting.NewService(database.DB, graphStore, workflowEngine)
 	productsService := products.NewService(database.DB, graphStore, workflowEngine)
 
-	// 5. Start Background Outbox Poller with Controlled Shutdown Sync
+	// 5. Start Background Outbox Poller (disabled on scale-to-zero serverless unless opted in;
+	// all write services already trigger inline ProcessPendingEvents after commit)
 	pollerCtx, cancelPoller := context.WithCancel(context.Background())
 	var pollerWG sync.WaitGroup
-	pollerWG.Add(1)
-
-	go func() {
-		defer pollerWG.Done()
-		ticker := time.NewTicker(3 * time.Second)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-pollerCtx.Done():
-				return
-			case <-ticker.C:
-				count, err := workflowEngine.ProcessPendingEvents()
-				if err != nil {
-					slog.Error("outbox poller error", "error", err)
-				} else if count > 0 {
-					slog.Info("dispatched background domain events", "count", count)
+	if !isServerless || os.Getenv("ENABLE_OUTBOX_POLLER") == "1" {
+		pollerWG.Add(1)
+		go func() {
+			defer pollerWG.Done()
+			ticker := time.NewTicker(3 * time.Second)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-pollerCtx.Done():
+					return
+				case <-ticker.C:
+					count, err := workflowEngine.ProcessPendingEvents()
+					if err != nil {
+						slog.Error("outbox poller error", "error", err)
+					} else if count > 0 {
+						slog.Info("dispatched background domain events", "count", count)
+					}
 				}
 			}
-		}
-	}()
+		}()
+	} else {
+		slog.Info("background outbox ticker disabled in serverless mode (inline dispatch active)")
+	}
 
-	// 6. Router Setup with Svelte 5 Embedded SPA
+	// 6. Router Setup with Svelte 5 Embedded SPA & Storage Adapter
 	svelteFS, err := web.GetFS()
 	if err != nil {
 		slog.Warn("embedded Svelte dist not found", "error", err)
 	}
 
+	dbMode := "sqlite"
+	if !database.IsSQLite {
+		dbMode = "turso"
+	}
+	uploadStore := storage.NewFromEnv("./data/uploads")
+	slog.Info("configured storage backend", "storage", uploadStore.Mode(), "db_mode", dbMode)
+
 	absWebDir, _ := filepath.Abs(*webDir)
 	r := router.NewRouter(router.AppServices{
-		DB:        database.DB,
-		Graph:     graphStore,
-		Workflow:  workflowEngine,
-		Masters:   mastersService,
-		Orders:    ordersService,
-		Inventory: inventoryService,
-		Planning:  planningService,
-		Cutting:   cuttingService,
-		Products:  productsService,
-		WebFS:     svelteFS,
-		WebDir:    absWebDir,
+		DB:          database.DB,
+		Graph:       graphStore,
+		Workflow:    workflowEngine,
+		Masters:     mastersService,
+		Orders:      ordersService,
+		Inventory:   inventoryService,
+		Planning:    planningService,
+		Cutting:     cuttingService,
+		Products:    productsService,
+		UploadStore: uploadStore,
+		DBMode:      dbMode,
+		WebFS:       svelteFS,
+		WebDir:      absWebDir,
 	})
 
 	server := &http.Server{

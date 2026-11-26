@@ -6,6 +6,24 @@
   import RemnantModal from '../components/RemnantModal.svelte';
   import DiscrepancyModal from '../components/DiscrepancyModal.svelte';
   import GraphInspectorModal from '../components/GraphInspectorModal.svelte';
+  import {
+    cleanDisplayNames,
+    normInwardKind,
+    normalizeNonApparelGenre,
+    defaultUomForInward,
+    getInwardTypeOptions,
+    getZipTeethSizes,
+    getPackagingVariants,
+    getPackagingSizes,
+    getTrimItems,
+    getTrimSizes,
+    getTrimColors,
+    getGenreOptionsForInward,
+    getProductOptionsForInward,
+    getAllowedSizesForInward,
+    getDefaultSizeSpecForInward,
+    reconcileBundleSizeSpec
+  } from '../lib/inwardRules.js';
 
   let { masters = {} } = $props();
 
@@ -82,7 +100,9 @@
   let gateTrimThreadLength = $state('');
 
   let gateFgType = $state('Polo');
+  let gateGender = $state('Men');
   let gateVendorFgName = $state('');
+  let lastActiveInwardType = $state('Fabric');
 
   let gateLabelCategory = $state('Brand Label');
   let gateLabelType = $state('ETTU');
@@ -108,7 +128,7 @@
       color: 'Navy Blue',
       uom: 'Kgs',
       dia: seq === 1 ? '60"' : '34"',
-      gsm: seq === 1 ? 180 : 220,
+      gsm: seq === 1 ? '180' : '220',
       composition: '100% Super Combed Cotton',
       rate: seq === 1 ? 350.0 : 380.0,
       rollCount: seq === 1 ? 3 : 1
@@ -126,7 +146,7 @@
 
   function removeFabricProduct(idx) {
     if (fabricProducts.length <= 1) {
-      if (window.showToast) window.showToast('Lot must have at least one fabric product', 'warn');
+      if (window.showToast) window.showToast('Lot must have at least one fabric product', 'warning');
       return;
     }
     fabricProducts = fabricProducts.filter((_, i) => i !== idx);
@@ -134,7 +154,7 @@
 
   // Derive total bundles for fabric consignment
   let fabricTotalRolls = $derived.by(() => {
-    return fabricProducts.reduce((sum, fp) => sum + (parseInt(fp.rollCount, 10) || 1), 0);
+    return fabricProducts.reduce((sum, fp) => sum + (Number(fp.rollCount) || 1), 0);
   });
 
   // Keep gateNoOfBundles in sync with fabric total rolls
@@ -158,8 +178,24 @@
   let floorCountedBy = $state('Storekeeper Ramesh');
   let floorComments = $state('');
   let floorHoldOnShort = $state(true);
+  const FLOOR_ATTR_KEYS = [
+    'fabricType', 'composition', 'invoiceGsm', 'dia',
+    'zipType', 'teethSize', 'slider', 'closure', 'teethColor', 'tapeColor',
+    'trimType', 'trimSize', 'cordEnd', 'fusingGsm', 'threadLength',
+    'packagingType', 'packagingVariant', 'packagingSize',
+    'labelCategory', 'labelGenre', 'labelType', 'labelDescription', 'baseColor', 'textColor',
+    'finishedGoodType', 'gender'
+  ];
+
+  function createEmptyFloorAttrs() {
+    /** @type {Record<string, any>} */
+    const out = {};
+    for (const k of FLOOR_ATTR_KEYS) out[k] = '';
+    return out;
+  }
+
   let floorBundles = $state([]);
-  let floorAttrs = $state({});
+  let floorAttrs = $state(createEmptyFloorAttrs());
 
   // =========================================================
   // STATION 1C: QC INSPECTION STATE (PHONE VIEW)
@@ -180,58 +216,58 @@
   let recordingTimerInterval = null;
 
   // =========================================================
-  // MASTER DATA DROPDOWNS & OPTIONS
+  // MASTER DATA DROPDOWNS & CATEGORY-LINKED OPTIONS
   // =========================================================
-  const defaultInwardTypes = [
-    'Fabric', 'Zips', 'packaging', 'Trims', 'Label', 'Apparel',
-    'Other Inwards', 'Electronic', 'Drinkwear', 'Headgear', 'Bags', 'Stationery'
-  ];
-  let inwardTypeOptions = $derived((masters.inward_types && masters.inward_types.length > 0)
-    ? masters.inward_types.map(i => i.display_name)
-    : defaultInwardTypes);
+  let inwardTypeOptions = $derived(getInwardTypeOptions(masters));
 
   const defaultFabricTypes = [
     'Fabric', 'Collar', 'Cuff', 'Rib', 'Bonded', 'Canvass', 'Fleece', 'Grindle', 'Hemp',
     'Interlock', 'Jacquard', 'Knitted', 'Looperknit', 'NS Lycra', 'Pique', 'Single Jersey', 'Terry', 'Woven', 'WR-rain'
   ];
   let fabricTypeOptions = $derived((masters.fabric_types && masters.fabric_types.length > 0)
-    ? masters.fabric_types.map(f => f.display_name)
+    ? cleanDisplayNames(masters.fabric_types)
     : defaultFabricTypes);
 
   const standardGsmOptions = ['140', '160', '180', '200', '220', '240', '260', '280', '300', '320', '350', '380', '400'];
   const standardDiaOptions = ['24"', '26"', '28"', '30"', '32"', '34"', '36"', '40"', '48"', '60"'];
 
   let zipTypeOptions = $derived((masters.zip_types && masters.zip_types.length > 0)
-    ? masters.zip_types.map(z => z.display_name)
+    ? cleanDisplayNames(masters.zip_types)
     : ['Coil', 'Waterproof', 'Vislon Zip', 'Two way Coil', 'Metal', 'Reverse Coil', 'Aluminium', 'Plastic']);
 
   let zipSliderOptions = $derived((masters.zip_sliders && masters.zip_sliders.length > 0)
-    ? masters.zip_sliders.map(z => z.display_name)
+    ? cleanDisplayNames(masters.zip_sliders)
     : ['Auto-lock', 'DA8DR4', 'DADR7 EJ PB 12', 'metal', 'rubber', 'DA8DR7', 'DABDR4']);
 
   let zipClosureOptions = $derived((masters.zip_closures && masters.zip_closures.length > 0)
-    ? masters.zip_closures.map(z => z.display_name)
+    ? cleanDisplayNames(masters.zip_closures)
     : ['open ended', 'closed ended', '2 way', 'roll']);
 
   let teethColorOptions = $derived((masters.zip_finishes && masters.zip_finishes.length > 0)
-    ? masters.zip_finishes.map(z => z.display_name)
+    ? cleanDisplayNames(masters.zip_finishes)
     : ['Antique Brass', 'Gunmetal', 'Shiny Silver', 'Matte Black', 'Golden', 'Antique silver', 'Gold', 'Matt silver', 'Matt Gold']);
 
-  let packagingTypeOptions = $derived((masters.packaging_types && masters.packaging_types.length > 0)
-    ? masters.packaging_types.map(p => p.display_name)
-    : ['Polybag', 'Carton Tape', 'Hangtag', 'Loop Pins', 'Butter Paper', 'Carton', 'Sticker', 'Shrink wrap', 'Courier Bag', 'Other']);
+  let packagingTypeOptions = $derived.by(() => {
+    const cleaned = cleanDisplayNames(masters.packaging_types || []);
+    return cleaned.length > 0
+      ? cleaned
+      : ['Polybag', 'Carton Tape', 'Hangtag', 'Loop Pins', 'Butter Paper', 'Carton', 'Sticker', 'Shrink wrap', 'Courier Bag', 'Other'];
+  });
 
   let trimTypeOptions = $derived((masters.trim_types && masters.trim_types.length > 0)
-    ? masters.trim_types.map(t => t.display_name)
+    ? cleanDisplayNames(masters.trim_types)
     : ['Elastic', 'Tapes', 'Cord', 'Button', 'Fusing', 'Thread', 'Eyelets', 'Stopper', 'Other Trims']);
 
-  const trimSizeOptions = ['14L', '16L', '18L', '20L', '24L', '28L', '32L', '36L', '40L', '5mm', '8mm', '10mm', '12mm', '15mm', '20mm', '25mm', '30mm', '38mm', '50mm', 'Round', 'Flat'];
-  const labelTypeOptions = ['Damask Woven', 'Printed Satin', 'Heat Transfer Tagless', 'Leather / Jacron Patch', 'Paper Sticker', 'Tag Label', 'Woven Taffeta'];
-  let labelGenreOptions = $derived((masters.label_genres && masters.label_genres.length > 0)
-    ? masters.label_genres.map(l => l.display_name)
-    : ['Woven', 'Printed', 'DTF', 'Tareaway', 'Main Label', 'Size label', 'Main+Size Label', 'washcare Label', 'COO Label', 'side Label']);
+  let genderOptions = $derived.by(() => {
+    const raw = cleanDisplayNames(masters.genders || []);
+    const base = raw.length > 0 ? raw : ['Men', 'Women', 'Unisex', 'Infant', 'Jr', 'Kids'];
+    return [...base, 'All Apparel'];
+  });
 
-  const fgTypeOptions = ['Polo', 'T-Shirt', 'Hoodie', 'Sweatshirt', 'Joggers', 'Jacket', 'Shorts', 'Tracksuit'];
+  let labelGenreOptions = $derived((masters.label_genres && masters.label_genres.length > 0)
+    ? cleanDisplayNames(masters.label_genres)
+    : ['Woven', 'Printed', 'DTF', 'Tareaway']);
+
   const qcRemarkOptions = [
     'Clean / OK - Flawless inspection pass',
     'Minor shade variation within tolerance',
@@ -253,136 +289,200 @@
   let colorOptions = $derived((masters.colors || []).map(c => ({ value: c.display_name, label: c.display_name, code: c.code })));
   let locationOptions = $derived((masters.locations || []).map(l => ({ value: l.code, label: `${l.code} - ${l.display_name}`, code: l.code })));
   let uomOptions = $derived((masters.uoms || []).map(u => ({ value: u.code, label: u.display_name, code: u.code })));
-
   let fabricOptions = $derived((masters.fabrics || []).map(f => ({ value: f.display_name, label: f.display_name })));
-  let zipOptions = $derived((masters.zips || []).map(z => ({ value: z.display_name, label: z.display_name })));
-  let trimOptions = $derived((masters.trims || []).map(t => ({ value: t.display_name, label: t.display_name })));
-  let packagingOptions = $derived((masters.packaging || []).map(p => ({ value: p.display_name, label: p.display_name })));
-  let labelOptions = $derived((masters.labels || []).map(l => ({ value: l.display_name, label: l.display_name })));
-  let productOptions = $derived((masters.products || []).map(p => ({ value: p.display_name, label: p.display_name })));
-
-  function normInwardKind(t) {
-    const k = (t || '').trim().toLowerCase();
-    if (k.startsWith('fabric') || k === '') return 'fabric';
-    if (k === 'zips' || k === 'zip') return 'zips';
-    if (k === 'trims' || k === 'trim') return 'trims';
-    if (k === 'packaging') return 'packaging';
-    if (k === 'label' || k === 'labels') return 'label';
-    if (k === 'apparel' || k === 'finished goods') return 'apparel';
-    return 'other';
-  }
 
   let gateKind = $derived(normInwardKind(gateInwardType));
   let floorKind = $derived(normInwardKind(floorLotDetail?.lot?.inwardType));
   let isFloorFabric = $derived(floorLotDetail ? floorKind === 'fabric' : false);
 
   let compositionOptions = $derived((masters.compositions && masters.compositions.length > 0)
-    ? masters.compositions.map(c => c.display_name)
+    ? cleanDisplayNames(masters.compositions)
     : ['95%Poly 5%SP', '100%Poly', '100%Cot', '60%Cot 40%Poly', '95%Cot 5%SP']);
 
-  let fabricGenericOptions = $derived((masters.fabric_generics && masters.fabric_generics.length > 0)
-    ? masters.fabric_generics.map(f => f.display_name)
-    : []);
-
-  let zipTeethSizeOptions = $derived((masters.zip_sizes && masters.zip_sizes.length > 0)
-    ? masters.zip_sizes.map(s => s.display_name)
-    : ['5.0', '6.0', '7.0', '8.0', '10.0', '12.0', '14.0', '16.0', 'na']);
+  let zipTeethSizeOptions = $derived(getZipTeethSizes(masters));
 
   function packagingVariantOptionsFor(pType) {
-    const p = (pType || '').toLowerCase();
-    if (p.includes('poly')) return (masters.packaging_polybag_brands || []).map(x => x.display_name);
-    if (p.includes('tape')) return (masters.packaging_tape_variants || []).map(x => x.display_name);
-    if (p.includes('loop')) return (masters.packaging_loop_materials || []).map(x => x.display_name);
-    if (p.includes('carton')) return (masters.packaging_carton_brands || []).map(x => x.display_name);
-    if (p.includes('courier')) return (masters.packaging_courier_brands || []).map(x => x.display_name);
-    return [];
+    return getPackagingVariants(masters, pType);
   }
 
   function packagingSizeOptionsFor(pType) {
-    const p = (pType || '').toLowerCase();
-    if (p.includes('poly')) return (masters.packaging_polybag_sizes || []).map(x => x.display_name);
-    if (p.includes('tape')) return (masters.packaging_tape_sizes || []).map(x => x.display_name);
-    if (p.includes('loop')) return (masters.packaging_loop_sizes || []).map(x => x.display_name);
-    if (p.includes('carton')) return (masters.packaging_carton_sizes || []).map(x => x.display_name);
-    if (p.includes('shrink')) return (masters.packaging_shrink_sizes || []).map(x => x.display_name);
-    if (p.includes('courier')) return (masters.packaging_courier_sizes || []).map(x => x.display_name);
-    return (masters.packaging_sizes || []).map(x => x.display_name);
+    return getPackagingSizes(masters, pType);
   }
 
   function trimItemsForType(tType) {
-    const t = (tType || '').trim();
-    if (t === 'Elastic') return (masters.trim_elastics || []).map(x => ({ value: x.display_name, label: x.display_name }));
-    if (t === 'Tapes') return (masters.trim_tapes || []).map(x => ({ value: x.display_name, label: x.display_name }));
-    if (t === 'Cord') return (masters.trim_cords || []).map(x => ({ value: x.display_name, label: x.display_name }));
-    if (t === 'Button') return (masters.trim_buttons || []).map(x => ({ value: x.display_name, label: x.display_name }));
-    if (t === 'Fusing') return (masters.trim_fusings || []).map(x => ({ value: x.display_name, label: x.display_name }));
-    if (t === 'Thread') return (masters.trim_threads || []).map(x => ({ value: x.display_name, label: x.display_name }));
-    if (t === 'Eyelets') return (masters.trims || []).filter(i => (i.display_name || '').toLowerCase().includes('eyelet')).map(x => ({ value: x.display_name, label: x.display_name }));
-    if (t === 'Stopper') return (masters.trims || []).filter(i => (i.display_name || '').toLowerCase().includes('stopper')).map(x => ({ value: x.display_name, label: x.display_name }));
-    return trimOptions;
+    return getTrimItems(masters, tType);
   }
 
   function trimSizesForType(tType) {
-    const t = (tType || '').trim();
-    if (t === 'Elastic') return (masters.trim_elastic_sizes || []).map(x => x.display_name);
-    if (t === 'Tapes') return (masters.trim_tape_sizes || []).map(x => x.display_name);
-    if (t === 'Cord') return (masters.trim_cord_sizes || []).map(x => x.display_name);
-    if (t === 'Button') return (masters.trim_button_sizes || []).map(x => x.display_name);
-    if (t === 'Fusing') return (masters.trim_fusing_sizes || []).map(x => x.display_name);
-    if (t === 'Thread') return (masters.trim_thread_sizes || []).map(x => x.display_name);
-    return (masters.trim_other_sizes || []).map(x => x.display_name);
+    return getTrimSizes(masters, tType);
   }
 
   function trimColorsForType(tType) {
-    const t = (tType || '').trim();
-    if (t === 'Fusing') return (masters.trim_fusing_colors || []).map(x => ({ value: x.display_name, label: x.display_name }));
-    if (t === 'Other Trims' || t === 'Eyelets' || t === 'Stopper') return (masters.trim_other_colors || []).map(x => ({ value: x.display_name, label: x.display_name }));
-    return colorOptions;
+    return getTrimColors(masters, tType, colorOptions);
   }
 
-  let finishedGenreOptions = $derived.by(() => {
-    if (gateKind === 'apparel') {
-      return masters.apparel_genres || fgTypeOptions;
-    }
-    const nonApp = masters.non_apparel_genres || ['Drinkwear', 'Headgear', 'Bags', 'Stationary', 'Electronics', 'Others'];
-    return nonApp;
+  let finishedGenreOptions = $derived(getGenreOptionsForInward(masters, gateInwardType));
+
+  let activeGateCtx = $derived({
+    genre: gateKind === 'non_apparel' ? normalizeNonApparelGenre(gateInwardType) : gateFgType,
+    gender: gateGender,
+    trimType: gateTrimType,
+    trimSize: gateTrimSize,
+    packagingType: gatePackagingType,
+    packagingSize: gatePackagingSize,
+    labelCategory: gateLabelCategory,
+    labelGenre: gateLabelGenre,
+    zipType: gateZipType,
+    teethSize: gateZipTeethSize,
+    closure: gateClosure
   });
 
-  let bundleSizeSuggestions = $derived.by(() => {
-    if (gateKind === 'zips') return zipTeethSizeOptions;
-    if (gateKind === 'trims') return trimSizesForType(gateTrimType);
-    if (gateKind === 'packaging') return packagingSizeOptionsFor(gatePackagingType);
-    if (gateKind === 'apparel') return (masters.sizes || []).map(s => s.display_name);
-    if (gateKind === 'other') {
-      const nas = masters.non_apparel_sizes?.[gateInwardType.trim()] || masters.non_apparel_sizes?.[gateFgType] || ['Std', 'Small', 'Medium', 'Large'];
-      return nas;
-    }
-    return [];
+  let bundleSizeSuggestions = $derived(getAllowedSizesForInward(masters, gateInwardType, activeGateCtx));
+
+  let fpccProductOptions = $derived(getProductOptionsForInward(masters, gateInwardType, activeGateCtx));
+
+  let floorBundleSizeSuggestions = $derived.by(() => {
+    if (!floorLotDetail?.lot) return [];
+    const lot = floorLotDetail.lot;
+    return getAllowedSizesForInward(masters, lot.inwardType, {
+      genre: floorAttrs.finishedGoodType || normalizeNonApparelGenre(lot.inwardType),
+      gender: floorAttrs.gender || '',
+      trimType: floorAttrs.trimType || '',
+      packagingType: floorAttrs.packagingType || ''
+    });
   });
 
-  let fpccProductOptions = $derived.by(() => {
-    switch (gateKind) {
-      case 'fabric': return fabricOptions;
-      case 'zips': return zipOptions;
-      case 'packaging': return packagingOptions;
-      case 'trims': return trimItemsForType(gateTrimType);
-      case 'label': return gateLabelCategory === 'Additional Label'
-        ? (masters.label_additionals || []).map(l => ({ value: l.display_name, label: l.display_name }))
-        : (masters.label_brands || []).map(l => ({ value: l.display_name, label: l.display_name }));
-      case 'apparel':
-      case 'other': return productOptions;
-      default: return productOptions;
+  function applyInwardTypeTransition(newType, preserveUom = false) {
+    const clean = (newType || '').trim();
+    const nextKind = normInwardKind(clean);
+    if (nextKind === 'unset') return;
+    if (clean === lastActiveInwardType) return;
+
+    lastActiveInwardType = clean;
+    customBundleDistribution = false;
+    gateFpccProduct = '';
+    gateVendorProduct = '';
+    gateVendorFgName = '';
+    gateVendorZipName = '';
+    gateVendorTrimName = '';
+    gateVendorPackagingName = '';
+    gateFpccColor = '';
+    gateVendorColor = '';
+    gateTrimRate = '';
+
+    if (nextKind === 'non_apparel') {
+      gateFgType = normalizeNonApparelGenre(clean);
+    } else if (nextKind === 'other') {
+      const naGenres = getGenreOptionsForInward(masters, clean);
+      gateFgType = naGenres[0] || 'Others';
+    } else if (nextKind === 'apparel') {
+      const appGenres = getGenreOptionsForInward(masters, clean);
+      if (!appGenres.includes(gateFgType)) {
+        gateFgType = appGenres.includes('Polo') ? 'Polo' : (appGenres[0] || 'Polo');
+      }
+      if (!gateGender) gateGender = 'Men';
+    } else if (nextKind === 'trims') {
+      gateTrimCordEnd = '';
+      gateTrimFusingGsm = '';
+      gateTrimThreadLength = '';
+      gateTrimSize = getTrimSizes(masters, gateTrimType)[0] || '';
+    } else if (nextKind === 'packaging') {
+      const variants = getPackagingVariants(masters, gatePackagingType);
+      const pSizes = getPackagingSizes(masters, gatePackagingType);
+      gatePackagingVariant = variants[0] || '';
+      gatePackagingSize = pSizes[0] || '';
+    } else if (nextKind === 'zips') {
+      const tSizes = getZipTeethSizes(masters);
+      if (!tSizes.includes(gateZipTeethSize)) {
+        gateZipTeethSize = tSizes[0] || '5.0';
+      }
+    } else if (nextKind === 'label') {
+      const lGenres = cleanDisplayNames(masters?.label_genres || []);
+      if (lGenres.length > 0 && !lGenres.includes(gateLabelGenre)) {
+        gateLabelGenre = lGenres[0];
+      }
+      const lOpts = getProductOptionsForInward(masters, clean, { labelCategory: gateLabelCategory });
+      gateLabelType = lOpts[0]?.value || '';
     }
-  });
 
-  let vendorProductOptions = $derived(fpccProductOptions);
+    if (!preserveUom) {
+      gateUom = defaultUomForInward(clean, gateTrimType);
+    }
 
-  // Default UOM per inward type
+    const nextCtx = {
+      genre: nextKind === 'non_apparel' ? normalizeNonApparelGenre(clean) : gateFgType,
+      gender: gateGender,
+      trimType: gateTrimType,
+      trimSize: gateTrimSize,
+      packagingType: gatePackagingType,
+      packagingSize: gatePackagingSize,
+      labelCategory: gateLabelCategory,
+      labelGenre: gateLabelGenre,
+      zipType: gateZipType,
+      teethSize: gateZipTeethSize,
+      closure: gateClosure
+    };
+    const nextAllowed = getAllowedSizesForInward(masters, clean, nextCtx);
+    const nextDefault = getDefaultSizeSpecForInward(masters, clean, nextCtx);
+    gateBundles = gateBundles.map(b => ({
+      ...b,
+      sizeSpec: reconcileBundleSizeSpec('', nextAllowed, nextDefault)
+    }));
+  }
+
+  function onApparelGenreChange(val) {
+    gateFgType = val;
+    if ((val || '').toLowerCase() === 'onsies') {
+      gateGender = 'Infant';
+    }
+    const valid = getProductOptionsForInward(masters, gateInwardType, { ...activeGateCtx, genre: val });
+    if (gateFpccProduct && !valid.some(p => p.value === gateFpccProduct)) {
+      gateFpccProduct = '';
+    }
+  }
+
+  function onGenderChange(val) {
+    gateGender = val;
+    const allowed = getAllowedSizesForInward(masters, gateInwardType, { ...activeGateCtx, gender: val });
+    const def = getDefaultSizeSpecForInward(masters, gateInwardType, { ...activeGateCtx, gender: val });
+    gateBundles = gateBundles.map(b => ({
+      ...b,
+      sizeSpec: reconcileBundleSizeSpec(b.sizeSpec, allowed, def)
+    }));
+  }
+
+  function onTrimTypeChange(val) {
+    gateTrimType = val;
+    gateFpccProduct = '';
+    gateVendorTrimName = '';
+    gateFpccColor = '';
+    gateTrimCordEnd = '';
+    gateTrimFusingGsm = '';
+    gateTrimThreadLength = '';
+    gateTrimSize = getTrimSizes(masters, val)[0] || '';
+    if (!selectedInvoice?.uom) {
+      gateUom = defaultUomForInward(gateInwardType, val);
+    }
+  }
+
+  function onPackagingTypeChange(val) {
+    gatePackagingType = val;
+    gateFpccProduct = '';
+    gateVendorPackagingName = '';
+    gatePackagingVariant = getPackagingVariants(masters, val)[0] || '';
+    gatePackagingSize = getPackagingSizes(masters, val)[0] || '';
+  }
+
+  function onLabelCategoryChange() {
+    const lOpts = getProductOptionsForInward(masters, gateInwardType, { labelCategory: gateLabelCategory });
+    gateLabelType = lOpts[0]?.value || '';
+  }
+
   $effect(() => {
-    const k = gateKind;
-    if (k === 'fabric') gateUom = 'Kgs';
-    else if (k === 'trims' && gateTrimType === 'Thread') gateUom = '1000 mt tube';
-    else gateUom = 'Pcs';
+    const cur = (gateInwardType || '').trim();
+    if (cur && normInwardKind(cur) !== 'unset' && cur !== lastActiveInwardType) {
+      untrack(() => applyInwardTypeTransition(cur, Boolean(selectedInvoice?.inwardType)));
+    }
   });
 
   function redistributeGateBundlesEvenly() {
@@ -400,7 +500,7 @@
   function onGateBundleQtyChange() {
     customBundleDistribution = true;
     const sum = gateBundles.reduce((acc, b) => acc + (parseFloat(b.invoicedQty) || 0), 0);
-    gateInvoiceQty = Math.round(sum * 1000) / 1000;
+    gateInvoiceQty = String(Math.round(sum * 1000) / 1000);
   }
 
   // Re-generate Station 1A bundle stubs when count, products, or parentCode changes
@@ -415,7 +515,7 @@
       let rem = invTotal > 0 ? Math.round((invTotal - defaultPer * totalCount) * 1000) / 1000 : 0;
       let seq = 0;
       for (const fp of fabricProducts) {
-        const rCount = parseInt(fp.rollCount, 10) || 1;
+        const rCount = Number(fp.rollCount) || 1;
         for (let r = 0; r < rCount; r++) {
           seq++;
           const existing = (untrack(() => gateBundles))[seq - 1] || {};
@@ -434,19 +534,15 @@
         }
       }
     } else {
-      const count = parseInt(gateNoOfBundles, 10) || 1;
+      const count = Number(gateNoOfBundles) || 1;
       const defaultPer = invTotal > 0 ? Math.round((invTotal / count) * 1000) / 1000 : 0;
       let rem = invTotal > 0 ? Math.round((invTotal - defaultPer * count) * 1000) / 1000 : 0;
       const rateVal = parseFloat(gateTrimRate) || 0;
-      const defaultSpec = gateKind === 'zips'
-        ? (gateZipTeethSize || '')
-        : gateKind === 'trims'
-          ? (gateTrimSize || '')
-          : gateKind === 'packaging'
-            ? (gatePackagingSize || '')
-            : gateKind === 'label'
-              ? (gateLabelGenre || '')
-              : '';
+      const defaultSpec = getDefaultSizeSpecForInward(masters, gateInwardType, activeGateCtx);
+      const allowedSpecs = bundleSizeSuggestions;
+      const defaultZipItem = gateKind === 'zips'
+        ? `${gateZipType || 'Metal'} #${gateZipTeethSize || '5.0'} ${gateClosure || 'open ended'}`.trim()
+        : '';
       for (let i = 1; i <= count; i++) {
         const existing = (untrack(() => gateBundles))[i - 1] || {};
         const evenVal = i === count ? Math.round((defaultPer + rem) * 1000) / 1000 : defaultPer;
@@ -454,9 +550,9 @@
           sequence: i,
           total: count,
           bundleCode: `${pCode}-${i}/${count}`,
-          itemName: gateFpccProduct || gateVendorProduct || (gateKind === 'label' ? gateLabelType : gateInwardType),
-          colorName: gateKind === 'label' ? (gateLabelBaseColor || gateFpccColor || '') : (gateFpccColor || gateVendorColor || ''),
-          sizeSpec: existing.sizeSpec || defaultSpec,
+          itemName: gateFpccProduct || gateVendorProduct || (gateKind === 'label' ? gateLabelType : (gateKind === 'zips' ? (gateVendorZipName || defaultZipItem) : gateInwardType)),
+          colorName: gateKind === 'label' ? (gateLabelBaseColor || gateFpccColor || '') : (gateKind === 'zips' ? (gateTapeColor || gateTeethColor || '') : (gateFpccColor || gateVendorColor || '')),
+          sizeSpec: reconcileBundleSizeSpec(existing.sizeSpec, allowedSpecs, defaultSpec),
           invoicedQty: customBundleDistribution && existing.invoicedQty !== undefined ? existing.invoicedQty : evenVal,
           rate: existing.rate !== undefined && existing.rate !== '' ? existing.rate : rateVal,
           status: 'Pending'
@@ -527,9 +623,10 @@
     gateInwardDate = inv.invoiceDate;
     if (inv.inwardType) {
       gateInwardType = inv.inwardType;
+      applyInwardTypeTransition(inv.inwardType, true);
     }
     gateInvoiceAmount = inv.invoiceAmount;
-    gateUom = inv.uom || 'Kgs';
+    gateUom = inv.uom || defaultUomForInward(inv.inwardType || gateInwardType, gateTrimType);
     taggedLotsOnInvoice = inv.taggedLots || [];
     if (window.showToast) {
       window.showToast(`Autofilled invoice ${inv.invoiceNo} (Locked to Inward Type: ${inv.inwardType || gateInwardType}, ${taggedLotsOnInvoice.length} lots tagged)`, 'info');
@@ -547,11 +644,31 @@
   // ---------------------------------------------------------
   async function handleGateSubmit(e) {
     e.preventDefault();
+    if (gateKind === 'unset') {
+      if (window.showToast) window.showToast('Please select a valid Inward Type first', 'error');
+      return;
+    }
     const bundleQtySum = gateBundles.reduce((acc, b) => acc + (parseFloat(b.invoicedQty) || 0), 0);
     const effectiveInvoiceQty = (parseFloat(gateInvoiceQty) || 0) > 0 ? parseFloat(gateInvoiceQty) : bundleQtySum;
     if (!gateParentCode || !gateVendorName.trim() || !gateInvoiceNo.trim() || effectiveInvoiceQty <= 0) {
       if (window.showToast) window.showToast('Please enter Parent Code, Vendor, Invoice No, and positive Invoice Qty (overall or per bundle)', 'error');
       return;
+    }
+
+    if (gateKind !== 'fabric' && bundleSizeSuggestions.length > 0) {
+      const invalidBundle = gateBundles.find(b => (b.sizeSpec || '').trim() && !bundleSizeSuggestions.includes(b.sizeSpec.trim()));
+      if (invalidBundle) {
+        if (window.showToast) window.showToast(`Invalid size/spec "${invalidBundle.sizeSpec}" for ${gateInwardType}. Select an allowed ${gateInwardType} size.`, 'error');
+        return;
+      }
+    }
+
+    if (fpccProductOptions.length > 0 && gateFpccProduct.trim() && gateKind !== 'fabric' && gateKind !== 'zips') {
+      const validProd = fpccProductOptions.some(p => p.value === gateFpccProduct.trim() || p.label === gateFpccProduct.trim());
+      if (!validProd) {
+        if (window.showToast) window.showToast(`Product "${gateFpccProduct}" does not belong to category ${gateInwardType}. Pick a valid item from the dropdown.`, 'error');
+        return;
+      }
     }
 
     isSubmitting = true;
@@ -568,18 +685,19 @@
           color: fp.color,
           uom: fp.uom || 'Kgs',
           dia: fp.dia || '60"',
-          gsm: parseFloat(fp.gsm) || 180,
+          gsm: Number(fp.gsm) || 180,
           composition: fp.composition,
-          rate: parseFloat(fp.rate) || 0,
-          rollCount: parseInt(fp.rollCount, 10) || 1
+          rate: Number(fp.rate) || 0,
+          rollCount: Number(fp.rollCount) || 1
         }));
 
+        /** @type {Record<string, any>} */
         const primary = fabricProducts[0] || {};
         attrs.fabricType = primary.fabricType;
-        attrs.invoiceGsm = parseFloat(primary.gsm) || 0;
-        attrs.dia = parseFloat(String(primary.dia).replace(/[^0-9.]/g, '')) || 0;
+        attrs.invoiceGsm = Number(primary.gsm) || 0;
+        attrs.dia = parseFloat(String(primary.dia || '').replace(/[^0-9.]/g, '')) || 0;
         attrs.composition = primary.composition;
-        attrs.rate = parseFloat(primary.rate) || 0;
+        attrs.rate = Number(primary.rate) || 0;
         attrs.vendorFabName = primary.vendorProduct;
         attrs.fpccFabName = primary.fpccProduct;
       } else if (gateKind === 'zips') {
@@ -605,8 +723,12 @@
         if (gateTrimCordEnd) attrs.cordEnd = gateTrimCordEnd;
         if (gateTrimFusingGsm) attrs.fusingGsm = gateTrimFusingGsm;
         if (gateTrimThreadLength) attrs.threadLength = gateTrimThreadLength;
-      } else if (gateKind === 'apparel' || gateKind === 'other') {
-        attrs.finishedGoodType = gateFgType;
+      } else if (gateKind === 'apparel' || gateKind === 'non_apparel' || gateKind === 'other') {
+        const resolvedGenre = gateKind === 'non_apparel' ? normalizeNonApparelGenre(gateInwardType) : gateFgType;
+        attrs.finishedGoodType = resolvedGenre;
+        if (gateKind === 'apparel') {
+          attrs.gender = gateGender;
+        }
         attrs.vendorFgName = gateVendorFgName || gateVendorProduct;
         attrs.fpccFgName = gateFpccProduct;
       } else if (gateKind === 'label') {
@@ -625,6 +747,7 @@
         rate: parseFloat(b.rate) || 0
       }));
 
+      const resolvedZipFpcc = gateFpccProduct || `${gateZipType || 'Metal'} #${gateZipTeethSize || '5.0'} ${gateClosure || 'open ended'}`.trim();
       const payload = {
         parentCode: gateParentCode,
         inwardDate: gateInwardDate,
@@ -634,16 +757,20 @@
         invoiceQty: effectiveInvoiceQty,
         invoiceAmount: parseFloat(gateInvoiceAmount) || 0,
         uom: gateUom,
-        vendorProduct: gateKind === 'fabric' ? (fabricProducts[0]?.vendorProduct || '') : gateVendorProduct,
-        fpccProduct: gateKind === 'fabric' ? (fabricProducts[0]?.fpccProduct || '') : (gateFpccProduct || (gateKind === 'label' ? gateLabelType : '')),
+        vendorProduct: gateKind === 'fabric'
+          ? (fabricProducts[0]?.vendorProduct || '')
+          : (gateVendorFgName || gateVendorZipName || gateVendorTrimName || gateVendorPackagingName || gateVendorProduct),
+        fpccProduct: gateKind === 'fabric'
+          ? (fabricProducts[0]?.fpccProduct || '')
+          : (gateFpccProduct || (gateKind === 'label' ? gateLabelType : (gateKind === 'zips' ? resolvedZipFpcc : ''))),
         vendorColor: gateKind === 'fabric' ? (fabricProducts[0]?.color || '') : gateVendorColor,
         fpccColor: gateKind === 'fabric' ? (fabricProducts[0]?.color || '') : (gateFpccColor || gateLabelBaseColor),
-        noOfBundles: gateKind === 'fabric' ? fabricTotalRolls : (parseInt(gateNoOfBundles, 10) || 1),
+        noOfBundles: gateKind === 'fabric' ? fabricTotalRolls : (Number(gateNoOfBundles) || 1),
         comment: gateComment,
         attrs,
         bundles: stubsPayload,
         fabricProducts: fabricPayload,
-        qrCopies: parseInt(qrCopiesPerBundle, 10) || 3
+        qrCopies: Number(qrCopiesPerBundle) || 3
       };
 
       const res = await api.gateInward(payload);
@@ -682,14 +809,38 @@
       isLoading = true;
       const detail = await api.getLot(pCode);
       const rawBundles = Array.isArray(detail?.bundles) ? detail.bundles : [];
-      floorLotDetail = { ...detail, bundles: rawBundles };
       floorInvoicedQty = detail.lot.invoiceQty;
       floorCountedQty = detail.lot.countedQty > 0 ? detail.lot.countedQty : detail.lot.invoiceQty;
       floorLocationBin = rawBundles[0]?.locationBin || 'A/R01/S01';
       floorComments = detail.lot.remarks || '';
-      floorAttrs = { ...(detail.lot.attrs || {}) };
+      const loadedAttrs = { ...createEmptyFloorAttrs(), ...(detail.lot.attrs || {}) };
+      const lotKind = normInwardKind(detail.lot.inwardType);
+      if (lotKind === 'non_apparel') {
+        loadedAttrs.finishedGoodType = normalizeNonApparelGenre(detail.lot.inwardType) || loadedAttrs.finishedGoodType || '';
+      } else if (lotKind === 'apparel' && !loadedAttrs.gender) {
+        loadedAttrs.gender = 'Men';
+      } else if (lotKind === 'fabric') {
+        if (!loadedAttrs.fabricType && detail.lot.fabricProducts?.[0]?.fabricType) {
+          loadedAttrs.fabricType = detail.lot.fabricProducts[0].fabricType;
+        }
+        if (!loadedAttrs.invoiceGsm && detail.lot.fabricProducts?.[0]?.gsm) {
+          loadedAttrs.invoiceGsm = detail.lot.fabricProducts[0].gsm;
+        }
+        if (!loadedAttrs.dia && detail.lot.fabricProducts?.[0]?.dia) {
+          loadedAttrs.dia = detail.lot.fabricProducts[0].dia;
+        }
+      }
+      for (const k of FLOOR_ATTR_KEYS) {
+        loadedAttrs[k] = loadedAttrs[k] !== null && loadedAttrs[k] !== undefined ? String(loadedAttrs[k]) : '';
+      }
+      if (lotKind === 'fabric' && loadedAttrs.dia) {
+        const cleanDia = loadedAttrs.dia.replace(/"/g, '').trim();
+        loadedAttrs.dia = cleanDia ? `${cleanDia}"` : '';
+      }
+      floorAttrs = loadedAttrs;
+      floorLotDetail = { ...detail, bundles: rawBundles };
 
-      const lotIsFabric = normInwardKind(detail.lot.inwardType) === 'fabric';
+      const lotIsFabric = lotKind === 'fabric';
       const defaultRate = detail.lot.invoiceQty > 0 ? Math.round((detail.lot.invoiceAmount / detail.lot.invoiceQty) * 100) / 100 : 0;
 
       const bList = rawBundles.map(b => ({
@@ -700,8 +851,8 @@
         invoicedQty: b.invoicedQty > 0 ? b.invoicedQty : Math.round((detail.lot.invoiceQty / (rawBundles.length || 1)) * 1000) / 1000,
         countedQty: b.inwardQty > 0 ? b.inwardQty : (b.invoicedQty > 0 ? b.invoicedQty : Math.round((detail.lot.invoiceQty / (rawBundles.length || 1)) * 1000) / 1000),
         locationBin: b.locationBin || 'A/R01/S01',
-        measuredGsm: lotIsFabric ? String(b.measuredGsm || detail.lot.attrs?.invoiceGsm || '180') : '',
-        measuredDia: lotIsFabric ? String(b.measuredDia || detail.lot.attrs?.dia || '60"') : '',
+        measuredGsm: lotIsFabric ? String(b.measuredGsm || loadedAttrs.invoiceGsm || '180') : '',
+        measuredDia: lotIsFabric ? String(b.measuredDia || loadedAttrs.dia || '60"') : '',
         sizeSpec: b.sizeSpec || '',
         rate: b.rate || defaultRate,
         comment: b.bundleComment || ''
@@ -722,7 +873,9 @@
     if (invQ <= 0 || cntQ <= 0) return null;
 
     const variance = cntQ - invQ;
+    const variancePctNum = Math.abs((variance / invQ) * 100);
     const variancePct = ((variance / invQ) * 100).toFixed(2);
+    const variancePctAbs = variancePctNum.toFixed(2);
     const financialExposure = Math.abs(variance * unitRate);
 
     if (variance < -0.05) {
@@ -730,9 +883,9 @@
         status: 'SHORTAGE_FLAGGED',
         type: 'danger',
         variance: variance.toFixed(2),
-        variancePct: Math.abs(variancePct),
+        variancePct: variancePctNum,
         exposure: financialExposure.toFixed(2),
-        title: `🚨 Dock Shortage Discrepancy: ${Math.abs(variance).toFixed(2)} ${floorLotDetail?.lot?.uom || 'Kgs'} (${Math.abs(variancePct)}% Shortage)`,
+        title: `🚨 Dock Shortage Discrepancy: ${Math.abs(variance).toFixed(2)} ${floorLotDetail?.lot?.uom || 'Kgs'} (${variancePctAbs}% Shortage)`,
         desc: `Physical counted weight is less than billed supplier invoice. Debit note exposure: ₹${financialExposure.toLocaleString('en-IN', { minimumFractionDigits: 2 })}. Placing on DISCREPANCY_HOLD freezes supplier debit.`
       };
     } else if (variance > 0.05) {
@@ -740,7 +893,7 @@
         status: 'EXCESS_FLAGGED',
         type: 'warning',
         variance: variance.toFixed(2),
-        variancePct: Math.abs(variancePct),
+        variancePct: variancePctNum,
         exposure: financialExposure.toFixed(2),
         title: `⚠️ Dock Excess Received: +${variance.toFixed(2)} ${floorLotDetail?.lot?.uom || 'Kgs'} (+${variancePct}%)`,
         desc: `Physical received exceeds billed supplier invoice. Reconcile with delivery challan.`
@@ -775,13 +928,21 @@
 
   function autoSumFloorBundles() {
     const sum = floorBundles.reduce((acc, b) => acc + (parseFloat(b.countedQty) || 0), 0);
-    floorCountedQty = Math.round(sum * 100) / 100;
+    floorCountedQty = String(Math.round(sum * 100) / 100);
     if (window.showToast) window.showToast(`Aggregated bundle sum: ${floorCountedQty}`, 'info');
   }
 
   async function handleFloorSubmit(e) {
     e.preventDefault();
     if (!floorSelectedLotCode) return;
+
+    if (!isFloorFabric && floorBundleSizeSuggestions.length > 0) {
+      const bad = floorBundles.find(b => (b.sizeSpec || '').trim() && !floorBundleSizeSuggestions.includes(b.sizeSpec.trim()));
+      if (bad) {
+        if (window.showToast) window.showToast(`Invalid size/spec "${bad.sizeSpec}" for ${floorLotDetail?.lot?.inwardType}. Select a valid option from the size dropdown.`, 'error');
+        return;
+      }
+    }
 
     isSubmitting = true;
     try {
@@ -793,6 +954,7 @@
         countedBy: floorCountedBy,
         comments: floorComments,
         holdOnShort: floorHoldOnShort,
+        attrs: { ...floorAttrs },
         sizeLines: floorBundles.map(b => ({
           bundleCode: b.bundleCode,
           size: b.sizeSpec,
@@ -1197,7 +1359,7 @@
               class="form-control" 
               placeholder="🔍 Search previously recorded invoices by Invoice No or Vendor..." 
               bind:value={invoiceSearchQuery} 
-              oninput={(e) => handleSearchInvoices(e.target.value)} 
+              oninput={(e) => handleSearchInvoices(e.currentTarget.value)} 
             />
           </div>
 
@@ -1274,7 +1436,8 @@
                 options={inwardTypeOptions} 
                 bind:value={gateInwardType} 
                 placeholder="Select inward type..." 
-                allowCustom={false} 
+                allowCustom={false}
+                onSelect={(item) => applyInwardTypeTransition(item?.value || item?.display_name || gateInwardType)}
               />
             {/if}
           </div>
@@ -1282,8 +1445,8 @@
           <div class="form-group">
             <label for="gate-inv-amt">Invoice Total Amount (₹)</label>
             <input id="gate-inv-amt" type="number" step="0.01" class="form-control" bind:value={gateInvoiceAmount} placeholder="₹ 0.00" />
-            {#if gateInvoiceAmount && gateInvoiceQty > 0}
-              <span class="help-text">Avg Invoice Rate: ₹{(parseFloat(gateInvoiceAmount)/parseFloat(gateInvoiceQty)).toFixed(2)} / {gateUom}</span>
+            {#if gateInvoiceAmount && Number(gateInvoiceQty) > 0}
+              <span class="help-text">Avg Invoice Rate: ₹{(parseFloat(gateInvoiceAmount) / Number(gateInvoiceQty)).toFixed(2)} / {gateUom}</span>
             {/if}
           </div>
 
@@ -1367,9 +1530,13 @@
         </div>
 
         <!-- ==================================================== -->
-        <!-- FABRIC MULTI-PRODUCT SPECIFICATION                   -->
+        <!-- DYNAMIC SPECIFICATION PER INWARD TYPE                -->
         <!-- ==================================================== -->
-        {#if gateKind === 'fabric'}
+        {#if gateKind === 'unset'}
+          <div style="margin-top:20px;border-top:1px solid var(--border-color);padding:16px;background:var(--bg-tertiary);border-radius:var(--radius-sm);font-size:13px;color:var(--text-muted);">
+            Select an <strong>Invoice Inward Type</strong> above to load category-locked item catalogs, attributes, and allowed size specs.
+          </div>
+        {:else if gateKind === 'fabric'}
           <div class="fabric-multi-product-box" style="margin-top:20px;border-top:1px solid var(--border-color);padding-top:16px;">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
               <div>
@@ -1510,11 +1677,11 @@
               {#if gateKind === 'zips'}
                 <div class="form-group">
                   <span class="form-label-title">Zip Type</span>
-                  <Combobox options={zipTypeOptions} bind:value={gateZipType} allowCustom={true} />
+                  <Combobox options={zipTypeOptions} bind:value={gateZipType} allowCustom={false} />
                 </div>
                 <div class="form-group">
                   <span class="form-label-title">Teeth Size</span>
-                  <Combobox options={zipTeethSizeOptions} bind:value={gateZipTeethSize} placeholder="5.0, 8.0, 10.0..." allowCustom={true} />
+                  <Combobox options={zipTeethSizeOptions} bind:value={gateZipTeethSize} placeholder="5.0, 8.0, 10.0..." allowCustom={false} />
                 </div>
                 <div class="form-group">
                   <span class="form-label-title">Slider Spec</span>
@@ -1522,7 +1689,7 @@
                 </div>
                 <div class="form-group">
                   <span class="form-label-title">Closure Type</span>
-                  <Combobox options={zipClosureOptions} bind:value={gateClosure} allowCustom={true} />
+                  <Combobox options={zipClosureOptions} bind:value={gateClosure} allowCustom={false} />
                 </div>
                 <div class="form-group">
                   <span class="form-label-title">Teeth Finish / Color</span>
@@ -1533,8 +1700,8 @@
                   <Combobox options={colorOptions} bind:value={gateTapeColor} placeholder="Select tape color..." category="color" allowCustom={true} />
                 </div>
                 <div class="form-group">
-                  <span class="form-label-title">FPCC Zip Item</span>
-                  <Combobox options={zipOptions} bind:value={gateFpccProduct} placeholder="FPCC Zip name..." allowCustom={true} />
+                  <span class="form-label-title">FPCC Zip Item (Zips Only)</span>
+                  <Combobox options={fpccProductOptions} bind:value={gateFpccProduct} placeholder="Select Zip spec..." allowCustom={true} />
                 </div>
                 <div class="form-group">
                   <span class="form-label-title">Vendor Zip Name</span>
@@ -1543,7 +1710,12 @@
               {:else if gateKind === 'packaging'}
                 <div class="form-group">
                   <span class="form-label-title">Packaging Type</span>
-                  <Combobox options={packagingTypeOptions} bind:value={gatePackagingType} allowCustom={true} />
+                  <Combobox
+                    options={packagingTypeOptions}
+                    bind:value={gatePackagingType}
+                    allowCustom={false}
+                    onSelect={(item) => onPackagingTypeChange(item?.value || item?.display_name || gatePackagingType)}
+                  />
                 </div>
                 <div class="form-group">
                   <span class="form-label-title">Packaging Brand / Variant</span>
@@ -1551,11 +1723,11 @@
                 </div>
                 <div class="form-group">
                   <span class="form-label-title">Packaging Size / Dimension</span>
-                  <Combobox options={packagingSizeOptionsFor(gatePackagingType)} bind:value={gatePackagingSize} placeholder="Select standard size..." allowCustom={true} />
+                  <Combobox options={packagingSizeOptionsFor(gatePackagingType)} bind:value={gatePackagingSize} placeholder="Select standard size..." allowCustom={false} />
                 </div>
                 <div class="form-group">
-                  <span class="form-label-title">FPCC Packaging Item</span>
-                  <Combobox options={packagingOptions} bind:value={gateFpccProduct} placeholder="Select FPCC packaging..." allowCustom={true} />
+                  <span class="form-label-title">FPCC Packaging Item ({fpccProductOptions.length})</span>
+                  <Combobox options={fpccProductOptions} bind:value={gateFpccProduct} placeholder="Select FPCC packaging..." allowCustom={fpccProductOptions.length === 0} />
                 </div>
                 <div class="form-group">
                   <span class="form-label-title">Vendor Packaging Name</span>
@@ -1571,31 +1743,32 @@
                   <Combobox
                     options={trimTypeOptions}
                     bind:value={gateTrimType}
-                    allowCustom={true}
+                    allowCustom={false}
+                    onSelect={(item) => onTrimTypeChange(item?.value || item?.display_name || gateTrimType)}
                   />
                 </div>
                 <div class="form-group">
-                  <span class="form-label-title">FPCC {gateTrimType} Item</span>
-                  <Combobox options={trimItemsForType(gateTrimType)} bind:value={gateFpccProduct} placeholder="Select {gateTrimType}..." allowCustom={true} />
+                  <span class="form-label-title">FPCC {gateTrimType} Item ({fpccProductOptions.length})</span>
+                  <Combobox options={fpccProductOptions} bind:value={gateFpccProduct} placeholder={fpccProductOptions.length > 0 ? `Select ${gateTrimType}...` : `Enter ${gateTrimType} spec...`} allowCustom={fpccProductOptions.length === 0} />
                 </div>
                 <div class="form-group">
                   <span class="form-label-title">{gateTrimType === 'Thread' ? 'Thread Tex Size' : 'Trim Size / Width'}</span>
-                  <Combobox options={trimSizesForType(gateTrimType)} bind:value={gateTrimSize} placeholder="Select size..." allowCustom={true} />
+                  <Combobox options={trimSizesForType(gateTrimType)} bind:value={gateTrimSize} placeholder="Select size..." allowCustom={false} />
                 </div>
                 {#if gateTrimType === 'Cord'}
                   <div class="form-group">
                     <span class="form-label-title">Cord Ends</span>
-                    <Combobox options={(masters.trim_cord_ends || []).map(x => x.display_name)} bind:value={gateTrimCordEnd} allowCustom={true} />
+                    <Combobox options={cleanDisplayNames(masters.trim_cord_ends || [])} bind:value={gateTrimCordEnd} allowCustom={false} />
                   </div>
                 {:else if gateTrimType === 'Fusing'}
                   <div class="form-group">
                     <span class="form-label-title">Fusing GSM</span>
-                    <Combobox options={(masters.trim_fusing_gsms || []).map(x => x.display_name)} bind:value={gateTrimFusingGsm} allowCustom={true} />
+                    <Combobox options={cleanDisplayNames(masters.trim_fusing_gsms || [])} bind:value={gateTrimFusingGsm} allowCustom={false} />
                   </div>
                 {:else if gateTrimType === 'Thread'}
                   <div class="form-group">
                     <span class="form-label-title">Thread Length</span>
-                    <Combobox options={(masters.trim_thread_lengths || []).map(x => x.display_name)} bind:value={gateTrimThreadLength} allowCustom={true} />
+                    <Combobox options={cleanDisplayNames(masters.trim_thread_lengths || [])} bind:value={gateTrimThreadLength} allowCustom={false} />
                   </div>
                 {/if}
                 <div class="form-group">
@@ -1609,22 +1782,22 @@
               {:else if gateKind === 'label'}
                 <div class="form-group">
                   <span class="form-label-title">Label Category</span>
-                  <select class="form-control" bind:value={gateLabelCategory}>
+                  <select class="form-control" bind:value={gateLabelCategory} onchange={onLabelCategoryChange}>
                     <option value="Brand Label">Brand Label</option>
                     <option value="Additional Label">Additional Label</option>
                   </select>
                 </div>
                 <div class="form-group">
                   <span class="form-label-title">Label Genre (Brand &amp; Additional)</span>
-                  <Combobox options={labelGenreOptions} bind:value={gateLabelGenre} allowCustom={true} />
+                  <Combobox options={labelGenreOptions} bind:value={gateLabelGenre} allowCustom={false} />
                 </div>
                 <div class="form-group">
                   <span class="form-label-title">{gateLabelCategory === 'Additional Label' ? 'Additional Label Type' : 'Brand Label'}</span>
-                  <Combobox options={fpccProductOptions} bind:value={gateLabelType} allowCustom={true} />
+                  <Combobox options={fpccProductOptions} bind:value={gateLabelType} allowCustom={false} />
                 </div>
                 <div class="form-group">
                   <span class="form-label-title">Label Description</span>
-                  <Combobox options={(masters.label_descriptions || []).map(x => x.display_name)} bind:value={gateLabelDescription} allowCustom={true} />
+                  <Combobox options={cleanDisplayNames(masters.label_descriptions || [])} bind:value={gateLabelDescription} allowCustom={true} />
                 </div>
                 <div class="form-group">
                   <span class="form-label-title">Base Color</span>
@@ -1634,14 +1807,72 @@
                   <span class="form-label-title">Text / Print Color</span>
                   <Combobox options={colorOptions} bind:value={gateLabelTextColor} category="color" allowCustom={true} />
                 </div>
-              {:else}
+              {:else if gateKind === 'apparel'}
                 <div class="form-group">
-                  <span class="form-label-title">{gateKind === 'apparel' ? 'Apparel Genre' : 'Product Genre'}</span>
-                  <Combobox options={finishedGenreOptions} bind:value={gateFgType} allowCustom={true} />
+                  <span class="form-label-title">Apparel Genre</span>
+                  <Combobox
+                    options={finishedGenreOptions}
+                    bind:value={gateFgType}
+                    allowCustom={false}
+                    onSelect={(item) => onApparelGenreChange(item?.value || item?.display_name || gateFgType)}
+                  />
                 </div>
                 <div class="form-group">
-                  <span class="form-label-title">FPCC Master Product</span>
-                  <Combobox options={fpccProductOptions} bind:value={gateFpccProduct} placeholder="Select master product..." allowCustom={true} />
+                  <span class="form-label-title">Target Gender (Constrains Sizes)</span>
+                  <Combobox
+                    options={genderOptions}
+                    bind:value={gateGender}
+                    allowCustom={false}
+                    onSelect={(item) => onGenderChange(item?.value || item?.display_name || gateGender)}
+                  />
+                </div>
+                <div class="form-group">
+                  <span class="form-label-title">FPCC Apparel Product ({fpccProductOptions.length} {gateFgType} SKUs)</span>
+                  <Combobox
+                    options={fpccProductOptions}
+                    bind:value={gateFpccProduct}
+                    placeholder={fpccProductOptions.length > 0 ? `Select ${gateFgType} product...` : `No seeded ${gateFgType} SKUs — enter SKU...`}
+                    allowCustom={fpccProductOptions.length === 0}
+                  />
+                </div>
+                <div class="form-group">
+                  <span class="form-label-title">Vendor Item Name</span>
+                  <input class="form-control" bind:value={gateVendorFgName} placeholder="Vendor billed item name..." />
+                </div>
+                <div class="form-group">
+                  <span class="form-label-title">FPCC Color</span>
+                  <Combobox options={colorOptions} bind:value={gateFpccColor} category="color" allowCustom={true} />
+                </div>
+                <div class="form-group">
+                  <span class="form-label-title">Vendor Color</span>
+                  <Combobox options={colorOptions} bind:value={gateVendorColor} category="color" allowCustom={true} />
+                </div>
+              {:else}
+                {@const lockedGenre = gateKind === 'non_apparel' ? normalizeNonApparelGenre(gateInwardType) : ''}
+                <div class="form-group">
+                  <span class="form-label-title">{lockedGenre ? 'Product Category (Locked by Inward Type)' : 'Non-Apparel Genre'}</span>
+                  {#if lockedGenre}
+                    <input class="form-control font-bold" value={lockedGenre} readonly />
+                  {:else}
+                    <Combobox
+                      options={finishedGenreOptions}
+                      bind:value={gateFgType}
+                      allowCustom={false}
+                      onSelect={(item) => {
+                        gateFgType = item?.value || item?.display_name || gateFgType;
+                        gateFpccProduct = '';
+                      }}
+                    />
+                  {/if}
+                </div>
+                <div class="form-group">
+                  <span class="form-label-title">FPCC {lockedGenre || gateFgType || gateInwardType} Product ({fpccProductOptions.length} SKUs)</span>
+                  <Combobox
+                    options={fpccProductOptions}
+                    bind:value={gateFpccProduct}
+                    placeholder={fpccProductOptions.length > 0 ? `Select ${lockedGenre || gateFgType} product...` : `No seeded ${lockedGenre || gateFgType} SKUs — enter custom name...`}
+                    allowCustom={fpccProductOptions.length === 0}
+                  />
                 </div>
                 <div class="form-group">
                   <span class="form-label-title">Vendor Item Name</span>
@@ -1696,7 +1927,7 @@
                 <th>Bundle Code</th>
                 <th>Item / Part</th>
                 <th>Color</th>
-                <th>{gateKind === 'zips' ? 'Teeth Size / Spec' : 'Size / Spec'}</th>
+                <th>{gateKind === 'fabric' ? 'Fabric Type / Dia / GSM' : gateKind === 'zips' ? 'Teeth Size' : gateKind === 'apparel' ? `Size (${gateGender})` : 'Size / Spec'}</th>
                 <th>Invoice Qty ({gateUom})</th>
                 <th>Invoice Rate (₹)</th>
                 <th>Status</th>
@@ -1709,9 +1940,11 @@
                   <td><strong>{b.itemName || gateFpccProduct || gateInwardType}</strong></td>
                   <td>{b.colorName || 'Standard'}</td>
                   <td>
-                    {#if bundleSizeSuggestions.length > 0 && gateKind !== 'fabric'}
+                    {#if gateKind === 'fabric'}
+                      <span class="code-pill" style="font-size:11px;">{b.sizeSpec}</span>
+                    {:else if bundleSizeSuggestions.length > 0}
                       <div style="min-width:150px;">
-                        <Combobox options={bundleSizeSuggestions} bind:value={gateBundles[bIdx].sizeSpec} placeholder="Size..." allowCustom={true} />
+                        <Combobox options={bundleSizeSuggestions} bind:value={gateBundles[bIdx].sizeSpec} placeholder="Select size..." allowCustom={false} />
                       </div>
                     {:else}
                       <input 
@@ -1840,40 +2073,124 @@
               </div>
             </div>
 
-            <!-- Dynamic Step 2 Inward Attributes Summary / Editable Specs -->
-            {#if floorLotDetail.lot.attrs && Object.keys(floorLotDetail.lot.attrs).length > 0}
-              <div style="margin-top:12px;padding:10px 14px;background:var(--bg-tertiary);border:1px solid var(--border-color);border-radius:var(--radius-sm);font-size:12px;display:flex;flex-wrap:wrap;gap:14px;">
-                <span style="font-weight:700;color:var(--primary-color);">Step 2 Inward Specs ({floorLotDetail.lot.inwardType}):</span>
-                {#if floorKind === 'zips'}
-                  <span>Type: <strong>{floorAttrs.zipType || '—'}</strong></span>
-                  <span>Teeth Size: <strong>{floorAttrs.teethSize || '—'}</strong></span>
-                  <span>Slider: <strong>{floorAttrs.slider || '—'}</strong></span>
-                  <span>Closure: <strong>{floorAttrs.closure || '—'}</strong></span>
-                  <span>Teeth Finish: <strong>{floorAttrs.teethColor || '—'}</strong></span>
-                  <span>Tape Color: <strong>{floorAttrs.tapeColor || '—'}</strong></span>
-                {:else if floorKind === 'trims'}
-                  <span>Trim Type: <strong>{floorAttrs.trimType || '—'}</strong></span>
-                  <span>Size/Tex: <strong>{floorAttrs.trimSize || '—'}</strong></span>
+            <!-- Dynamic Step 2 Inward Attributes Summary / Editable Specs (Always Shown) -->
+            <div style="margin-top:12px;padding:12px 14px;background:var(--bg-tertiary);border:1px solid var(--border-color);border-radius:var(--radius-sm);font-size:12px;">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:8px;">
+                <span style="font-weight:700;color:var(--primary-color);">Step 2 Inward Specs ({floorLotDetail.lot.inwardType})</span>
+                <span style="color:var(--text-muted);font-size:11px;">
+                  Product: <strong>{floorLotDetail.lot.fpccProduct || floorLotDetail.lot.vendorProduct || '—'}</strong>
+                </span>
+              </div>
+
+              {#if floorKind === 'fabric'}
+                <div style="display:flex;flex-wrap:wrap;gap:14px;margin-bottom:10px;align-items:center;">
+                  <span>Invoice GSM: <strong>{floorAttrs.invoiceGsm || '—'}</strong></span>
+                  <span>Invoice Dia: <strong>{floorAttrs.dia ? `${String(floorAttrs.dia).replace(/"/g, '')}"` : '—'}</strong></span>
+                  <span>Fabric Type: <strong>{floorAttrs.fabricType || '—'}</strong></span>
+                  <span>Composition: <strong>{floorAttrs.composition || '—'}</strong></span>
+                  {#if floorLotDetail.lot.fabricProducts && floorLotDetail.lot.fabricProducts.length > 1}
+                    <span>Components: <strong>{floorLotDetail.lot.fabricProducts.map(f => `${f.fabricType || f.fpccProduct} (${f.gsm} GSM / ${f.dia})`).join(' · ')}</strong></span>
+                  {/if}
+                </div>
+                <div class="form-grid" style="gap:10px;">
+                  <div class="form-group" style="margin:0;">
+                    <span class="form-label-title">Verified Fabric Type</span>
+                    <Combobox options={fabricTypeOptions} bind:value={floorAttrs.fabricType} placeholder="Knitted, Pique, Single Jersey..." allowCustom={true} />
+                  </div>
+                  <div class="form-group" style="margin:0;">
+                    <span class="form-label-title">Composition</span>
+                    <Combobox options={compositionOptions} bind:value={floorAttrs.composition} placeholder="e.g. 100%Cot..." allowCustom={true} />
+                  </div>
+                  <div class="form-group" style="margin:0;">
+                    <span class="form-label-title">Invoice / Master GSM</span>
+                    <Combobox options={standardGsmOptions} bind:value={floorAttrs.invoiceGsm} placeholder="e.g. 220" allowCustom={true} />
+                  </div>
+                  <div class="form-group" style="margin:0;">
+                    <span class="form-label-title">Invoice / Master Dia</span>
+                    <Combobox options={standardDiaOptions} bind:value={floorAttrs.dia} placeholder="e.g. 32&quot;" allowCustom={true} />
+                  </div>
+                </div>
+              {:else if floorKind === 'zips'}
+                <div class="form-grid" style="gap:10px;">
+                  <div class="form-group" style="margin:0;">
+                    <span class="form-label-title">Zip Type</span>
+                    <Combobox options={zipTypeOptions} bind:value={floorAttrs.zipType} allowCustom={false} />
+                  </div>
+                  <div class="form-group" style="margin:0;">
+                    <span class="form-label-title">Teeth Size</span>
+                    <Combobox options={zipTeethSizeOptions} bind:value={floorAttrs.teethSize} allowCustom={false} />
+                  </div>
+                  <div class="form-group" style="margin:0;">
+                    <span class="form-label-title">Slider</span>
+                    <Combobox options={zipSliderOptions} bind:value={floorAttrs.slider} allowCustom={true} />
+                  </div>
+                  <div class="form-group" style="margin:0;">
+                    <span class="form-label-title">Closure</span>
+                    <Combobox options={zipClosureOptions} bind:value={floorAttrs.closure} allowCustom={false} />
+                  </div>
+                  <div class="form-group" style="margin:0;">
+                    <span class="form-label-title">Teeth Finish</span>
+                    <Combobox options={teethColorOptions} bind:value={floorAttrs.teethColor} allowCustom={true} />
+                  </div>
+                  <div class="form-group" style="margin:0;">
+                    <span class="form-label-title">Tape Color</span>
+                    <Combobox options={colorOptions} bind:value={floorAttrs.tapeColor} category="color" allowCustom={true} />
+                  </div>
+                </div>
+              {:else if floorKind === 'trims'}
+                <div class="form-grid" style="gap:10px;">
+                  <div class="form-group" style="margin:0;">
+                    <span class="form-label-title">Trim Type</span>
+                    <Combobox options={trimTypeOptions} bind:value={floorAttrs.trimType} allowCustom={false} />
+                  </div>
+                  <div class="form-group" style="margin:0;">
+                    <span class="form-label-title">Trim Size / Width</span>
+                    <Combobox options={trimSizesForType(floorAttrs.trimType)} bind:value={floorAttrs.trimSize} allowCustom={false} />
+                  </div>
                   {#if floorAttrs.cordEnd}<span>Cord Ends: <strong>{floorAttrs.cordEnd}</strong></span>{/if}
                   {#if floorAttrs.fusingGsm}<span>Fusing GSM: <strong>{floorAttrs.fusingGsm}</strong></span>{/if}
                   {#if floorAttrs.threadLength}<span>Length: <strong>{floorAttrs.threadLength}</strong></span>{/if}
-                {:else if floorKind === 'packaging'}
-                  <span>Type: <strong>{floorAttrs.packagingType || '—'}</strong></span>
-                  <span>Variant: <strong>{floorAttrs.packagingVariant || '—'}</strong></span>
-                  <span>Size: <strong>{floorAttrs.packagingSize || '—'}</strong></span>
-                {:else if floorKind === 'label'}
-                  <span>Category: <strong>{floorAttrs.labelCategory || '—'}</strong></span>
+                </div>
+              {:else if floorKind === 'packaging'}
+                <div class="form-grid" style="gap:10px;">
+                  <div class="form-group" style="margin:0;">
+                    <span class="form-label-title">Packaging Type</span>
+                    <Combobox options={packagingTypeOptions} bind:value={floorAttrs.packagingType} allowCustom={false} />
+                  </div>
+                  <div class="form-group" style="margin:0;">
+                    <span class="form-label-title">Variant</span>
+                    <Combobox options={packagingVariantOptionsFor(floorAttrs.packagingType)} bind:value={floorAttrs.packagingVariant} allowCustom={true} />
+                  </div>
+                  <div class="form-group" style="margin:0;">
+                    <span class="form-label-title">Size / Dimension</span>
+                    <Combobox options={packagingSizeOptionsFor(floorAttrs.packagingType)} bind:value={floorAttrs.packagingSize} allowCustom={false} />
+                  </div>
+                </div>
+              {:else if floorKind === 'label'}
+                <div style="display:flex;flex-wrap:wrap;gap:14px;">
+                  <span>Category: <strong>{floorAttrs.labelCategory || 'Brand Label'}</strong></span>
                   <span>Genre: <strong>{floorAttrs.labelGenre || '—'}</strong></span>
                   <span>Description: <strong>{floorAttrs.labelDescription || '—'}</strong></span>
                   <span>Colors: <strong>{floorAttrs.baseColor || '—'} / {floorAttrs.textColor || '—'}</strong></span>
-                {:else if floorKind === 'fabric'}
-                  <span>Composition: <strong>{floorAttrs.composition || '—'}</strong></span>
-                  <span>Fabric Type: <strong>{floorAttrs.fabricType || '—'}</strong></span>
-                {:else}
-                  <span>Genre: <strong>{floorAttrs.finishedGoodType || floorLotDetail.lot.inwardType}</strong></span>
-                {/if}
-              </div>
-            {/if}
+                </div>
+              {:else if floorKind === 'apparel'}
+                <div class="form-grid" style="gap:10px;">
+                  <div class="form-group" style="margin:0;">
+                    <span class="form-label-title">Apparel Genre</span>
+                    <Combobox options={getGenreOptionsForInward(masters, 'Apparel')} bind:value={floorAttrs.finishedGoodType} allowCustom={false} />
+                  </div>
+                  <div class="form-group" style="margin:0;">
+                    <span class="form-label-title">Target Gender (Bundle Size Filter)</span>
+                    <Combobox options={genderOptions} bind:value={floorAttrs.gender} allowCustom={false} />
+                  </div>
+                </div>
+              {:else}
+                <div style="display:flex;flex-wrap:wrap;gap:14px;">
+                  <span>Product Category: <strong>{normalizeNonApparelGenre(floorLotDetail.lot.inwardType) || floorAttrs.finishedGoodType || floorLotDetail.lot.inwardType}</strong></span>
+                  <span>Allowed Sizes: <strong>{floorBundleSizeSuggestions.join(', ') || 'Standard'}</strong></span>
+                </div>
+              {/if}
+            </div>
 
             <!-- Step 1 Invoice vs Step 2 Inward Touch Inputs -->
             <div class="form-grid" style="margin-top: 16px;">
@@ -2002,12 +2319,23 @@
                       <td><strong>{b.itemName || floorLotDetail.lot.fpccProduct}</strong></td>
                       <td>{b.colorName || '—'}</td>
                       <td>
-                        <input 
-                          class="form-control" 
-                          style="width: 120px; font-size:12px;" 
-                          bind:value={floorBundles[bIdx].sizeSpec} 
-                          placeholder="Size spec..." 
-                        />
+                        {#if !isFloorFabric && floorBundleSizeSuggestions.length > 0}
+                          <div style="min-width:140px;">
+                            <Combobox 
+                              options={floorBundleSizeSuggestions} 
+                              bind:value={floorBundles[bIdx].sizeSpec} 
+                              placeholder="Select allowed size..." 
+                              allowCustom={false} 
+                            />
+                          </div>
+                        {:else}
+                          <input 
+                            class="form-control" 
+                            style="width: 140px; font-size:12px;" 
+                            bind:value={floorBundles[bIdx].sizeSpec} 
+                            placeholder="Size spec..." 
+                          />
+                        {/if}
                       </td>
                       <td>
                         <span class="code-pill" style="opacity:0.85;">{b.invoicedQty}</span>
@@ -2221,7 +2549,7 @@
                             accept="image/*" 
                             capture="environment"
                             style="display:none;" 
-                            onchange={(e) => handleQCImageUpload(idx, e.target.files[0])} 
+                            onchange={(e) => { const f = e.currentTarget.files?.[0]; if (f) handleQCImageUpload(idx, f); }} 
                           />
                           {#if b.isUploading}
                             <span>⏳ Uploading...</span>

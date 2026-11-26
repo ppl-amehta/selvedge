@@ -4,13 +4,12 @@ import (
 	"bytes"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"net/http"
 	"os"
 	"path"
-	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -26,25 +25,41 @@ import (
 	"github.com/ppl-amehta/selvedge/internal/erp/planning"
 	"github.com/ppl-amehta/selvedge/internal/erp/products"
 	"github.com/ppl-amehta/selvedge/internal/graph"
+	"github.com/ppl-amehta/selvedge/internal/platform/storage"
 	"github.com/ppl-amehta/selvedge/internal/workflow"
 )
 
 type AppServices struct {
-	DB        *sql.DB
-	Graph     *graph.Store
-	Workflow  *workflow.Engine
-	Masters   *masters.Service
-	Orders    *orders.Service
-	Inventory *inventory.Service
-	Planning  *planning.Service
-	Cutting   *cutting.Service
-	Products  *products.Service
-	WebFS     fs.FS
-	WebDir    string
+	DB          *sql.DB
+	Graph       *graph.Store
+	Workflow    *workflow.Engine
+	Masters     *masters.Service
+	Orders      *orders.Service
+	Inventory   *inventory.Service
+	Planning    *planning.Service
+	Cutting     *cutting.Service
+	Products    *products.Service
+	UploadStore storage.Store
+	DBMode      string
+	WebFS       fs.FS
+	WebDir      string
 }
 
 func NewRouter(svc AppServices) http.Handler {
 	r := chi.NewRouter()
+
+	uploadStore := svc.UploadStore
+	if uploadStore == nil {
+		uploadStore = storage.NewFromEnv("./data/uploads")
+	}
+	dbMode := svc.DBMode
+	if dbMode == "" {
+		if strings.TrimSpace(os.Getenv("TURSO_DATABASE_URL")) != "" {
+			dbMode = "turso"
+		} else {
+			dbMode = "sqlite"
+		}
+	}
 
 	setupMiddleware(r)
 
@@ -73,6 +88,8 @@ func NewRouter(svc AppServices) http.Handler {
 			"version":         "1.0.0-production",
 			"arch":            "Unified Graph + Bi-Temporal Outbox (Go 1.27)",
 			"database":        dbStatus,
+			"db_mode":         dbMode,
+			"storage":         uploadStore.Mode(),
 			"goroutines":      runtime.NumGoroutine(),
 			"memory_alloc_mb": float64(m.Alloc) / 1024 / 1024,
 			"timestamp":       graph.NowMs(),
@@ -730,9 +747,16 @@ func NewRouter(svc AppServices) http.Handler {
 		renderJSON(w, http.StatusOK, map[string]any{"success": true, "dispatchedCount": count})
 	})
 
-	// 7. File Upload Endpoint (Images, Artwork, Specs)
+	// 7. File Upload Endpoint (Images, Artwork, Specs — Local Disk or Vercel Blob)
 	r.Post("/api/upload", func(w http.ResponseWriter, req *http.Request) {
-		if err := req.ParseMultipartForm(32 << 20); err != nil {
+		maxBytes := uploadStore.MaxBytes()
+		req.Body = http.MaxBytesReader(w, req.Body, maxBytes+(1<<20))
+		if err := req.ParseMultipartForm(maxBytes + (1 << 20)); err != nil {
+			var maxErr *http.MaxBytesError
+			if errors.As(err, &maxErr) {
+				renderError(w, http.StatusRequestEntityTooLarge, fmt.Sprintf("File too large (%d MB max per upload)", maxBytes/(1<<20)))
+				return
+			}
 			renderError(w, http.StatusBadRequest, "File too large or invalid multipart form")
 			return
 		}
@@ -744,41 +768,32 @@ func NewRouter(svc AppServices) http.Handler {
 		}
 		defer file.Close()
 
-		uploadDir := "./data/uploads"
-		if err := os.MkdirAll(uploadDir, 0755); err != nil {
-			renderError(w, http.StatusInternalServerError, "Failed to create uploads directory")
-			return
-		}
-
-		cleanBase := strings.ReplaceAll(filepath.Base(handler.Filename), " ", "_")
-		cleanFilename := fmt.Sprintf("%d_%s", time.Now().UnixNano()/1e6, cleanBase)
-		dstPath := filepath.Join(uploadDir, cleanFilename)
-
-		dst, err := os.Create(dstPath)
+		res, err := uploadStore.Save(req.Context(), handler.Filename, handler.Header.Get("Content-Type"), file, handler.Size)
 		if err != nil {
-			renderError(w, http.StatusInternalServerError, "Failed to create destination file: "+err.Error())
-			return
-		}
-		defer dst.Close()
-
-		if _, err := io.Copy(dst, file); err != nil {
-			renderError(w, http.StatusInternalServerError, "Failed to write file contents: "+err.Error())
+			status := http.StatusInternalServerError
+			if errors.Is(err, storage.ErrFileTooLarge) {
+				status = http.StatusRequestEntityTooLarge
+			}
+			renderError(w, status, err.Error())
 			return
 		}
 
-		fileURL := "/data/uploads/" + cleanFilename
 		renderJSON(w, http.StatusOK, map[string]any{
-			"success":  true,
-			"url":      fileURL,
-			"filename": cleanFilename,
-			"size":     handler.Size,
+			"success":     true,
+			"url":         res.URL,
+			"filename":    res.Filename,
+			"size":        res.Size,
+			"contentType": res.ContentType,
+			"storage":     res.StorageMode,
 		})
 	})
 
-	// Serve Static Uploads
-	_ = os.MkdirAll("./data/uploads", 0755)
-	uploadsFS := http.Dir("./data/uploads")
-	r.Handle("/data/uploads/*", http.StripPrefix("/data/uploads/", http.FileServer(uploadsFS)))
+	// Serve Static Uploads only when using local filesystem storage
+	if !uploadStore.IsRemote() && uploadStore.LocalDir() != "" {
+		_ = os.MkdirAll(uploadStore.LocalDir(), 0755)
+		uploadsFS := http.Dir(uploadStore.LocalDir())
+		r.Handle("/data/uploads/*", http.StripPrefix("/data/uploads/", http.FileServer(uploadsFS)))
+	}
 
 	// 8. Svelte 5 Frontend SPA Serving (Embedded in binary or disk fallback)
 	if svc.WebFS != nil {

@@ -135,7 +135,7 @@
 
     const reader = new FileReader();
     reader.onload = (event) => {
-      rawImportText = event.target?.result || '';
+      rawImportText = typeof event.target?.result === 'string' ? event.target.result : '';
       handleParseText(rawImportText);
     };
     reader.readAsText(file);
@@ -283,7 +283,13 @@
 <!-- 4-Column Bulk Import Modal -->
 {#if isImportModalOpen}
   <div class="modal-backdrop" onclick={() => isImportModalOpen = false} role="presentation">
-    <div class="modal-card" onclick={(e) => e.stopPropagation()} role="dialog">
+    <div
+      class="modal-card"
+      onclick={(e) => e.stopPropagation()}
+      onkeydown={(e) => e.key === 'Escape' && (isImportModalOpen = false)}
+      role="dialog"
+      tabindex="-1"
+    >
       <div class="modal-head">
         <div class="modal-title-group">
           <h3>4-Column Bulk Personalization Import</h3>
@@ -312,7 +318,7 @@
 Women	S	SMRITI MANDHANA	18
 Men	L	JASPRIT BUMRAH	93"
           bind:value={rawImportText}
-          oninput={(e) => handleParseText(e.target.value)}
+          oninput={(e) => handleParseText(e.currentTarget.value)}
         ></textarea>
 
         <!-- Live Validation Preview -->

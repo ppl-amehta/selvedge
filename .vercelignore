@@ -1,0 +1,15 @@
+.git
+.gitignore
+.github
+.agents
+.live
+.vercel
+.env*
+/data/
+/selvedge
+*.log
+tmp/
+coverage.txt
+web/node_modules
+web/dist
+.DS_Store

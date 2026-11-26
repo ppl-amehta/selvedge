@@ -12,6 +12,7 @@
   let masters = $state({});
   let isGraphOpen = $state(false);
   let isOnline = $state(false);
+  let healthInfo = $state(/** @type {Record<string, any> | null} */ (null));
   let toasts = $state([]);
 
   // Adaptive Day (Light) / Night (Dark) Theme
@@ -46,6 +47,11 @@
   }
 
   onMount(async () => {
+    const sp = new URLSearchParams(window.location.search).get('station');
+    if (sp && ['1A', '1B', '1C'].includes(sp)) {
+      activeStation = 'inward';
+    }
+
     // 1. Initialize Adaptive Theme
     try {
       const savedTheme = localStorage.getItem('selvedge-theme');
@@ -63,6 +69,7 @@
     // 2. Fetch System Health & Masters
     try {
       const health = await api.health();
+      healthInfo = health;
       isOnline = health.status === 'healthy' || health.status === 'ok';
 
       const data = await api.getMasters();
@@ -145,7 +152,7 @@
     </button>
     <div class="system-badge">
       <span class="system-dot"></span>
-      <span>{isOnline ? 'ONLINE (Go 1.27 SQLite WAL)' : 'CONNECTING...'}</span>
+      <span>{isOnline ? (healthInfo?.db_mode === 'turso' ? 'ONLINE (Go 1.27 · Turso Cloud · Vercel Blob)' : 'ONLINE (Go 1.27 SQLite WAL)') : 'CONNECTING...'}</span>
     </div>
   </div>
 </header>
